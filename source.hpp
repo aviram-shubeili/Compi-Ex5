@@ -101,6 +101,7 @@ public:
         else if (value == "/") type = DIV;
         else throw std::invalid_argument("wrong Binop");
     }
+    std::string toString();
 };
 class IdNode : public Node {
 public:

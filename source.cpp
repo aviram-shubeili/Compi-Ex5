@@ -43,47 +43,16 @@ void ExpListNode::addExp(basictype type) {
 }
 
 
-
-int i = 0;
-
-int eager() {
-    printf("EAGER");
-    exit(0);
-}
-
-int normalLazy() {
-    i++;
-    return 1;
-}
-
-void f(int a) {
-    if(a == 1) {
-        if(a == 2) {
-            return;
-        }
-    }
-
-}
-
-void g(int b) {
-}
-
-
-/**
-	Run this function!!!
-	Run this function!!!
-	Run this function!!!
-*/
-void ourFunction() {
-    g(eager());
-    f(normalLazy());
-    if(i == 1) {
-        printf("LAZY");
-    }
-    else if(i == 2) {
-        printf("NORMAL");
+std::string Binop::toString() {
+    switch (type) {
+        case PLUS: return "add";
+        case MINUS: return "sub";
+        case MUL: return "mul";
+        case DIV: return "sdiv";
     }
 }
+
+
 
 
 

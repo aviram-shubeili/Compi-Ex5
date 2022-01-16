@@ -152,7 +152,7 @@ FormalsList: FormalDecl COMMA FormalsList
 /* ******************************************************************************************** */
 FormalDecl: TypeAnnotation Type ID
 {
-    $$ = new FormalDeclNode($1->lineno, ((TypeAnnotationNode*)$1)->is_const, ((TypeNode*)$2)->type, ((IdNode*)$3)->name );
+    $$ = new FormalDeclNode($3->lineno, ((TypeAnnotationNode*)$1)->is_const, ((TypeNode*)$2)->type, ((IdNode*)$3)->name );
 } ;
 /* ******************************************************************************************** */
 Statements: Statement
@@ -383,39 +383,12 @@ Exp: LPAREN Exp RPAREN
   /* ******************************************************************************************** */
 Exp: Exp MULDIV_BINOP Exp
   {
-    if(((ExpNode*)$1)->type != INT_TYPE and ((ExpNode*)$1)->type != BYTE_TYPE) {
-      output::errorMismatch($1->lineno);
-      exit(0);
-    }
-    if(((ExpNode*)$3)->type != INT_TYPE and ((ExpNode*)$3)->type != BYTE_TYPE) {
-      output::errorMismatch($3->lineno);
-      exit(0);
-    }
-    if(((ExpNode*)$1)->type == INT_TYPE or ((ExpNode*)$3)->type == INT_TYPE) {
-        $$ = new ExpNode($3->lineno, INT_TYPE);
-      }
-      else {
-        $$ = new ExpNode($3->lineno, BYTE_TYPE);
-      }
+    $$ = HandleBinopExp(((ExpNode*)$1), ((Binop*)$2), ((ExpNode*)$3));
   } ;
   /* ******************************************************************************************** */
 Exp: Exp ADDSUB_BINOP Exp
   {
-    if(((ExpNode*)$1)->type != INT_TYPE and ((ExpNode*)$1)->type != BYTE_TYPE) {
-      output::errorMismatch($1->lineno);
-      exit(0);
-    }
-    if(((ExpNode*)$3)->type != INT_TYPE and ((ExpNode*)$3)->type != BYTE_TYPE) {
-      output::errorMismatch($3->lineno);
-      exit(0);
-    }
-    if(((ExpNode*)$1)->type == INT_TYPE or ((ExpNode*)$3)->type == INT_TYPE) {
-        $$ = new ExpNode($3->lineno, INT_TYPE);
-      }
-      else {
-        $$ = new ExpNode($3->lineno, BYTE_TYPE);
-      }
-
+      $$ = HandleBinopExp(((ExpNode*)$1), ((Binop*)$2), ((ExpNode*)$3;
   };
   /* ******************************************************************************************** */
 Exp: ID
