@@ -62,11 +62,14 @@ public:
 };
 
 class ExpNode : public Node {
+protected:
+    std::string var;
 public:
     basictype type;
-    std::string var;
     bool is_literal;
     ExpNode(int lineno, basictype type, std::string val,bool is_literal = false) : Node(lineno), type(type), var(val), is_literal(is_literal){}
+    virtual std::string getVar(bool is_const);
+    virtual std::string getVar();
 };
 
 class ExpListNode : public Node {

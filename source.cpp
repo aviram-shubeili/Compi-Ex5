@@ -54,13 +54,10 @@ std::string Binop::toString() {
 }
 
 
+std::string ExpNode::getVar(bool is_const) {
+    return var;
+}
 
-
-
-
-
-
-
-
-
-
+std::string ExpNode::getVar() {
+    return var;
+}

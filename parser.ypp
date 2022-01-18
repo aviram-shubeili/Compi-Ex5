@@ -280,7 +280,7 @@ Statement: CONTINUE SC
  } ;
  /* ******************************************************************************************** */
 Call: ID LPAREN ExpList RPAREN
- {
+ {  
    try {
      Symbol id_sym = SymbolsRepo::Instance().findSymbol(((IdNode*)$1)->name);
      if(not id_sym.type.is_function) {

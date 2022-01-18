@@ -126,18 +126,7 @@ StatementNode *HandleDeclaration(bool is_const, TypeNode *type, IdNode *id) {
         output::errorConstDef(id->lineno);
         exit(0);
     }
-    string default_value;
-    switch (type->type) {
-        case INT_TYPE:
-        case BYTE_TYPE:
-            default_value = "0";
-            break;
-        case BOOL_TYPE:
-            default_value = "false";
-            break;
-        default:
-            assert(false);
-    }
+    string default_value = "0";
     ExpNode* default_exp = new ExpNode(DONT_CARE, type->type, default_value, true);
     return HandleDeclarationAssignment(is_const, type, id, default_exp);
 }
@@ -150,7 +139,7 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
     }
     try {
         if(is_const and exp->is_literal) {
-            SymbolsRepo::Instance().insertSymbolAsLiteral(id->name, Type(is_const, type->type), exp->var);
+            SymbolsRepo::Instance().insertSymbolAsLiteral(id->name, Type(is_const, type->type), exp->getVar(true));
             return new StatementNode(exp->lineno);
         }
         else {
@@ -158,14 +147,14 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
             Symbol id_sym = SymbolsRepo::Instance().findSymbol(id->name);
             string bp = RegGenerator::Instance().getCurrentBasePointer();
             string ptr = RegGenerator::Instance().genRegister();
-            if(exp->type == BYTE_TYPE)
+            if(exp->type != INT_TYPE)
             {
                 string new_var = RegGenerator::Instance().genRegister();
-                CodeBuffer::instance().emit(new_var + " = zext i8 " + exp->var + " to i32");
-                exp->var = new_var;
+                CodeBuffer::instance().emit(new_var + " = zext " + typeToString(exp->type) + " " + exp->getVar(false) + " to i32");
+                exp->getVar(false) = new_var;
             }
             CodeBuffer::instance().emit(ptr + " = getelementptr i32, i32* " + bp + " , i32 " + to_string(id_sym.offset));
-            CodeBuffer::instance().emit("store i32 " + exp->var + " i32* " + ptr);
+            CodeBuffer::instance().emit("store i32 " + exp->getVar(false) + " i32* " + ptr);
         }
     }
     catch (SymbolAlreadyDefinedInScope& e) {
@@ -177,36 +166,84 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
 
 
 BoolExpNode::BoolExpNode(int lineno, basictype type, bool value) :
-        ExpNode(lineno, type, RegGenerator::Instance().genRegister(),true)
+        ExpNode(lineno, type, "",true)
 {
+    // TODO this jump is not backpatched if there is a const assignment
     int loc = CodeBuffer::instance().emit("br label @");
     if (value)
     {
         true_list = CodeBuffer::makelist({loc,FIRST});
+        var = "1";
     }
     else {
         false_list = CodeBuffer::makelist({loc,FIRST});
+        var = "0";
     }
-
+    this->is_evaluated = false;
 }
 
 
 void BoolExpNode::applyNOT() {
+    this->is_literal = false;
     auto temp = false_list;
     false_list = true_list;
     true_list = temp;
 }
 void BoolExpNode::applyAND(const string& right_label, BoolExpNode* right) {
+    this->is_literal = false;
     CodeBuffer::instance().bpatch(this->true_list, right_label);
     this->false_list = CodeBuffer::merge(this->false_list, right->false_list);
     this->true_list = right->true_list;
 }
 void BoolExpNode::applyOR(const string& right_label, BoolExpNode* right) {
+    this->is_literal = false;
     CodeBuffer::instance().bpatch(this->false_list, right_label);
     this->true_list = CodeBuffer::merge(this->true_list, right->true_list);
     this->false_list = right->false_list;
 }
 
+
+std::string BoolExpNode::getVar(bool is_const) {
+    if(this->is_evaluated)
+    {
+        return var;
+    }
+    if(is_const and this->is_literal)
+    {
+        this->is_evaluated = true;
+        return var;
+    }
+
+    // true bp
+    string true_label = CodeBuffer::instance().genLabel();
+    int true_label_loc = CodeBuffer::instance().emit("br label @");
+    CodeBuffer::instance().bpatch(this->true_list,true_label);
+    //false bp
+    string false_label = CodeBuffer::instance().genLabel();
+    int false_label_loc = CodeBuffer::instance().emit("br label @");
+    CodeBuffer::instance().bpatch(this->false_list,false_label);
+    //end bp
+    string end_label = CodeBuffer::instance().genLabel();
+    string result_reg = RegGenerator::Instance().genRegister();
+    auto end_list = CodeBuffer::makelist({true_label_loc, FIRST});
+    end_list = CodeBuffer::merge(end_list, CodeBuffer::makelist({false_label_loc, FIRST}));
+    CodeBuffer::instance().bpatch(end_list,end_label);
+
+
+    CodeBuffer::instance().emit(result_reg + " = phi i1 [1, "  + true_label + "], [0, " + false_label + "]");
+
+    this->true_list.clear();
+    this->false_list.clear();
+    this->var = result_reg;
+    this->is_evaluated = true;
+
+    return result_reg;
+
+}
+
+std::string BoolExpNode::getVar() {
+    return getVar(false);
+}
 
 
 

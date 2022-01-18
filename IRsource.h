@@ -24,20 +24,22 @@ public:
 };
 
 class BoolExpNode : ExpNode {
+    bool is_evaluated;
 public:
     void applyNOT();
     void applyAND(const string& right_label, BoolExpNode* right);
     void applyOR(const string& right_label, BoolExpNode* right);
     std::vector<std::pair<int,BranchLabelIndex>> true_list;
     std::vector<std::pair<int,BranchLabelIndex>> false_list;
-    std::string true_label;
-    std::string false_label;
     BoolExpNode(int lineno, basictype type, bool value);
-    BoolExpNode(int lineno, basictype type, std::vector<std::pair<int,BranchLabelIndex>> true_list, std::vector<std::pair<int,BranchLabelIndex>> false_list)
-            : ExpNode(lineno, type, RegGenerator::Instance().genRegister()),
-              true_list(true_list),
-              false_list(false_list)
-    {}
+//    BoolExpNode(int lineno, basictype type, std::vector<std::pair<int,BranchLabelIndex>> true_list, std::vector<std::pair<int,BranchLabelIndex>> false_list)
+//            : ExpNode(lineno, type, RegGenerator::Instance().genRegister()),
+//              true_list(true_list),
+//              false_list(false_list)
+//    {}
+    std::string getVar() override;
+    std::string getVar(bool is_const) override;
+
 };
 
 class StatementNode : public Node {
