@@ -60,11 +60,13 @@ public:
     bool is_const;
     explicit TypeAnnotationNode(bool is_const, int lineno = DONT_CARE) : Node(lineno), is_const(is_const) {}
 };
+
 class ExpNode : public Node {
 public:
     basictype type;
     std::string var;
-    ExpNode(int lineno, basictype type, std::string val) : Node(lineno), type(type), var(val) {}
+    bool is_literal;
+    ExpNode(int lineno, basictype type, std::string val,bool is_literal = false) : Node(lineno), type(type), var(val), is_literal(is_literal){}
 };
 
 class ExpListNode : public Node {
@@ -125,15 +127,3 @@ public:
 };
 
 #define YYSTYPE Node*
-
-
-
-
-//typedef std::stack<int> OffsetStack ;
-//typedef std::map<std::string, Symbol> SymbolMap;
-//typedef std::stack<SymbolMap> SymbolMapStack;
-//extern SymbolMapStack symbolMapStack;
-//extern OffsetStack offsetStack;
-
-
-

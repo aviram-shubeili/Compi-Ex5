@@ -23,6 +23,7 @@ FormalsNode::FormalsNode(int num, std::vector<Symbol> args) : Node(num) {
     for(int i = 0 ; i < args.size() ; i++)
     {
         args[i].offset = -(i+1);
+        args[i].value = "%" + to_string(i);
     }
     arguments = args;
 }
@@ -36,7 +37,7 @@ std::vector<Type> FormalsNode::getArgumentsTypes() {
 }
 
 FormalDeclNode::FormalDeclNode(int lineno, bool is_const, basictype type, std::string name) : Node(lineno),
-                                                                                              arg(Symbol(name, Type(is_const,type),DONT_CARE)) {}
+                                                                                              arg(Symbol(name, Type(is_const,type),ARGUMENT,"")) {}
 
 void ExpListNode::addExp(basictype type) {
     types.emplace_back(type);

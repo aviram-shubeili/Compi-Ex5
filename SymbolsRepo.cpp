@@ -29,6 +29,14 @@ void SymbolsRepo::insertSymbol(std::string name, Type type) {
     }
 }
 
+void SymbolsRepo::insertSymbolAsLiteral(std::string name, Type type, std::string value){
+    if (Contains(name)) {
+        throw SymbolAlreadyDefinedInScope();
+    }
+    symbolMapStack.back().push_back(Symbol(name,type ,LITERAL,value));
+}
+
+
 void SymbolsRepo::closeScope() {
     output::endScope();
     SymbolMap::iterator it;

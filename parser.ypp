@@ -102,6 +102,7 @@ FuncDecl: RetType ID LPAREN Formals RPAREN
                                                 SymbolsRepo::Instance().insertSymbol(((IdNode*)$2)->name, (Type(((RetTypeNode*)$1)->type, ((FormalsNode*)$4)->getArgumentsTypes())));
                                                 SymbolsRepo::Instance().currentFunctionName = ((IdNode*)$2)->name;
                                                 SymbolsRepo::Instance().openNewScope();
+
                                                 for(auto& arg : ((FormalsNode*)$4)->arguments) {
                                                   SymbolsRepo::Instance().insertSymbolAsArgument(arg.name, arg);
                                                 }
@@ -170,32 +171,12 @@ Statement: { SymbolsRepo::Instance().openNewScope(); } LBRACE Statements RBRACE
 /* ******************************************************************************************** */
 Statement: TypeAnnotation Type ID SC
 {
-    if(((TypeAnnotationNode*)$1)->is_const) { /* TODO $1 or $4? */
-      output::errorConstDef($1->lineno);
-      exit(0);
-    }
-    try {
-      SymbolsRepo::Instance().insertSymbol(((IdNode*)$3)->name, Type(false, ((TypeNode*)$2)->type));
-    }
-    catch (SymbolAlreadyDefinedInScope& e) {
-        output::errorDef($3->lineno, ((IdNode*)$3)->name);
-        exit(0);
-    }
+    $$ = HandleDeclaration(((TypeNode*)$2), ((IdNode*)$3));
 };
 /* ******************************************************************************************** */
 Statement: TypeAnnotation Type ID ASSIGN Exp SC
  {
-   try {
-     SymbolsRepo::Instance().insertSymbol(((IdNode*)$3)->name, Type(((TypeAnnotationNode*)$1)->is_const, ((TypeNode*)$2)->type));
-   }
-   catch (SymbolAlreadyDefinedInScope& e) {
-       output::errorDef($3->lineno, ((IdNode*)$3)->name);
-       exit(0);
-   }
-    if((((TypeNode*)$2)->type != ((ExpNode*)$5)->type) and not (((TypeNode*)$2)->type == INT_TYPE and ((ExpNode*)$5)->type == BYTE_TYPE)) {
-        output::errorMismatch($5->lineno);
-        exit(0);
-    }
+       $$ = HandleDeclarationAssignment(((TypeAnnotationNode*)$1)->is_const, ((TypeNode*)$2), ((IdNode*)$3), ((ExpNode*)$5));
  } ;
 /* ******************************************************************************************** */
 Statement: ID ASSIGN Exp SC
@@ -393,17 +374,7 @@ Exp: Exp ADDSUB_BINOP Exp
   /* ******************************************************************************************** */
 Exp: ID
   {
-    try {
-      Symbol id_sym = SymbolsRepo::Instance().findSymbol(((IdNode*)$1)->name);
-      if(id_sym.type.is_function) {
-         throw SymbolNotFound();
-      }
-      $$ = new ExpNode($1->lineno, id_sym.getType());
-    }
-    catch(SymbolNotFound& e) {
-      output::errorUndef($1->lineno, ((IdNode*)$1)->name);
-      exit(0);
-    }
+      $$ = HandleIDExp(((IdNode*)$1));
   } ;
   /* ******************************************************************************************** */
 Exp: Call
@@ -413,7 +384,7 @@ Exp: Call
   /* ******************************************************************************************** */
 Exp: NUM
   {
-    $$ = new ExpNode($1->lineno, INT_TYPE);
+    $$ = new ExpNode($1->lineno, INT_TYPE,((NumNode*)$1)->value,true);
   } ;
   /* ******************************************************************************************** */
 Exp: NUM B
@@ -422,22 +393,23 @@ Exp: NUM B
         output::errorByteTooLarge($1->lineno, ((NumNode*)$1)->value);
         exit(0);
     }
-    $$ = new ExpNode($1->lineno, BYTE_TYPE);
+    $$ = new ExpNode($1->lineno, BYTE_TYPE,((NumNode*)$1)->value,true);
   } ;
   /* ******************************************************************************************** */
 Exp: STRING
   {
-    $$ = new ExpNode($1->lineno, STRING_TYPE);
+    std::string reg = generateValue(STRING_TYPE, ((StringNode*)$1)->value);
+    $$ = new ExpNode($1->lineno, STRING_TYPE, reg, true);
   } ;
   /* ******************************************************************************************** */
 Exp: TRUE
   {
-    $$ = new ExpNode($1->lineno, BOOL_TYPE);
+    $$ = new BoolExpNode($1->lineno, BOOL_TYPE, true);
   } ;
   /* ******************************************************************************************** */
 Exp: FALSE
   {
-    $$ = new ExpNode($1->lineno, BOOL_TYPE);
+   $$ = new BoolExpNode($1->lineno, BOOL_TYPE, false);
   } ;
   /* ******************************************************************************************** */
 Exp: NOT Exp
@@ -446,33 +418,37 @@ Exp: NOT Exp
       output::errorMismatch($2->lineno);
       exit(0);
     }
-    $$ = new ExpNode($1->lineno, BOOL_TYPE);
+
+    $$ = $2;
+    ((BoolExpNode*)$$)->applyNOT();
   } ;
   /* ******************************************************************************************** */
-Exp: Exp AND Exp
+Exp: Exp AND M Exp
   {
     if(((ExpNode*)$1)->type != BOOL_TYPE){
       output::errorMismatch($1->lineno);
       exit(0);
     }
-    if(((ExpNode*)$3)->type != BOOL_TYPE){
-      output::errorMismatch($3->lineno);
+    if(((ExpNode*)$4)->type != BOOL_TYPE){
+      output::errorMismatch($4->lineno);
       exit(0);
     }
-    $$ = new ExpNode($3->lineno, BOOL_TYPE);
+    $$ = $1;
+    ((BoolExpNode*)$$)->applyAND(((MNode*)$3)->label, ((BoolExpNode*)$4))
   } ;
   /* ******************************************************************************************** */
-Exp: Exp OR Exp
+Exp: Exp OR M Exp
   {
     if(((ExpNode*)$1)->type != BOOL_TYPE){
       output::errorMismatch($1->lineno);
       exit(0);
     }
-    if(((ExpNode*)$3)->type != BOOL_TYPE){
-      output::errorMismatch($3->lineno);
+    if(((ExpNode*)$4)->type != BOOL_TYPE){
+      output::errorMismatch($4->lineno);
       exit(0);
     }
-    $$ = new ExpNode($3->lineno, BOOL_TYPE);
+    $$ = $1;
+    ((BoolExpNode*)$$)->applyOR(((MNode*)$3)->label, ((BoolExpNode*)$4))
    } ;
   /* ******************************************************************************************** */
 Exp: Exp RELATIONAL Exp
@@ -518,6 +494,24 @@ Exp: LPAREN Type RPAREN
   } ;
   /* ******************************************************************************************** */
   M_IF_OPEN_SCOPE: /* epsilon */
+  {
+     if(((ExpNode*)$-1)->type != BOOL_TYPE) {
+       output::errorMismatch($-1->lineno);
+       exit(0);
+     }
+     SymbolsRepo::Instance().openNewScope();
+  };
+  /* ******************************************************************************************** */
+  M: /* epsilon */
+  {
+     if(((ExpNode*)$-1)->type != BOOL_TYPE) {
+       output::errorMismatch($-1->lineno);
+       exit(0);
+     }
+     SymbolsRepo::Instance().openNewScope();
+  };
+  /* ******************************************************************************************** */
+  N: /* epsilon */
   {
      if(((ExpNode*)$-1)->type != BOOL_TYPE) {
        output::errorMismatch($-1->lineno);

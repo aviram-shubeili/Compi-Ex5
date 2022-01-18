@@ -19,6 +19,12 @@ enum basictype {
     BOOL_TYPE
 };
 
+enum symboltype{
+    ARGUMENT,
+    LITERAL,
+    LOCAL
+};
+
 class Type {
 public:
     bool is_const;
@@ -39,11 +45,14 @@ class Symbol  {
 public:
     std::string name;
     Type type;
-    int offset;
-    Symbol(std::string n, Type t, int ofs) : name(std::move(n)), type(std::move(t)), offset(ofs) {}
+    enum symboltype symbol_type;
+    int offset = 0;
+    std::string value;
+    Symbol(std::string n, Type t, int ofs) : name(std::move(n)), type(std::move(t)), symbol_type(LOCAL), offset(ofs) {}
+    Symbol(std::string n, Type t, symboltype symbol_type, std::string value) : name(std::move(n)), type(std::move(t)),
+                                                                               symbol_type(symbol_type), value(std::move(value)) {}
     basictype getType() { return type.type; }
     friend bool operator<(const Symbol& lhs, const Symbol& rhs);
-
 };
 
 bool hasSameArguments(std::vector<Type> expected, std::vector<Type> actual);

@@ -30,6 +30,7 @@ public:
  */
     void insertSymbol(std::string name, Type type );
     void insertSymbolAsArgument(std::string name, Symbol sym );
+    void insertSymbolAsLiteral(string name, Type type, string value);
     void closeScope();
 
     /**
@@ -40,7 +41,9 @@ public:
     Symbol findSymbol(const std::string symbol_name);
 
     bool Contains(std::string symbol_name);
-    };
+
+
+};
 
 class SymbolException : public std::exception {};
 
