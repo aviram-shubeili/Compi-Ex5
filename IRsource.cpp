@@ -168,8 +168,8 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
 BoolExpNode::BoolExpNode(int lineno, basictype type, bool value) :
         ExpNode(lineno, type, "",true)
 {
-    // TODO this jump is not backpatched if there is a const assignment
     int loc = CodeBuffer::instance().emit("br label @");
+    ignore_label = CodeBuffer::instance().genLabel();
     if (value)
     {
         true_list = CodeBuffer::makelist({loc,FIRST});
@@ -210,6 +210,8 @@ std::string BoolExpNode::getVar(bool is_const) {
     }
     if(is_const and this->is_literal)
     {
+            CodeBuffer::instance().bpatch(this->false_list,ignore_label);
+            CodeBuffer::instance().bpatch(this->true_list,ignore_label);
         this->is_evaluated = true;
         return var;
     }

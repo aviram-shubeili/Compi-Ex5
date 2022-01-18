@@ -25,6 +25,7 @@ public:
 
 class BoolExpNode : ExpNode {
     bool is_evaluated;
+    std::string ignore_label;
 public:
     void applyNOT();
     void applyAND(const string& right_label, BoolExpNode* right);
