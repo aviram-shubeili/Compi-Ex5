@@ -67,9 +67,11 @@ protected:
 public:
     basictype type;
     bool is_literal;
-    ExpNode(int lineno, basictype type, std::string val,bool is_literal = false) : Node(lineno), type(type), var(val), is_literal(is_literal){}
+    ExpNode(int lineno, basictype type, std::string val, bool is_literal = false) : Node(lineno), type(type), var(val), is_literal(is_literal){}
     virtual std::string getVar(bool is_const);
     virtual std::string getVar();
+
+    void setVar(string new_var);
 };
 
 class ExpListNode : public Node {

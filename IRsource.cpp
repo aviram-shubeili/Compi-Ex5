@@ -1,5 +1,10 @@
 
 #include "IRsource.h"
+
+
+string Load(int offset);
+int ZextAndStore(int offset, string value, basictype value_type);
+int Store(int offset, string value);
 using namespace std;
 
 string typeToString(basictype type) {
@@ -10,76 +15,56 @@ string typeToString(basictype type) {
         default: assert(false);
     }
 }
-
-ExpNode* HandleBinopExp(ExpNode* left, Binop* op, ExpNode* right) {
-
-    if((left->type != INT_TYPE) and (left->type != BYTE_TYPE)) {
-        output::errorMismatch(left->lineno);
-        exit(0);
+string RelopTypeToString(reloptype type) {
+    switch (type) {
+        case EQUALS: return " eq ";
+        case NOT_EQUALS: return " ne ";
+        case BIGGER: return " sgt ";
+        case SMALLER: return " slt ";
+        case BIGGER_EQUALS: return " sge ";
+        case SMALLER_EQUALS: return " sle ";
+        default: assert(false);
     }
-    if((right->type != INT_TYPE) and (right->type != BYTE_TYPE)) {
-        output::errorMismatch(right->lineno);
-        exit(0);
+}
+string Zext(string reg, basictype type) {
+    if(type == INT_TYPE) {
+        return reg;
     }
-
-    string op_str = op->toString();
-    basictype result_type = (left->type == INT_TYPE or right->type == INT_TYPE)
-                            ? INT_TYPE
-                            : BYTE_TYPE;
-
-    if(op->type == DIV) {
-        int loc = handleZeroError(right->var);
-        if(left->type == BYTE_TYPE && right->type == BYTE_TYPE)
-        {
-            // TODO what about byte div int or int div byte
-            op_str = "udiv";
-        }
-        string label = CodeBuffer::instance().genLabel();
-        CodeBuffer::instance().bpatch(CodeBuffer::makelist({loc,SECOND}),label);
+    string new_reg = RegGenerator::Instance().genRegister();
+    CodeBuffer::instance().emit(new_reg + " = zext " + typeToString(type) + " " + reg + " to i32");
+    return new_reg;
+}
+string Trunc(string reg, basictype type) {
+    if(type == INT_TYPE) {
+        return reg;
     }
+    string new_reg = RegGenerator::Instance().genRegister();
+    CodeBuffer::instance().emit(new_reg + " = trunc i32 " + reg + " to " + typeToString(type));
+    return new_reg;
+}
+int Store(int offset, string value) {
+    string bp = RegGenerator::Instance().getCurrentBasePointer();
+    string ptr = RegGenerator::Instance().genRegister();
+    CodeBuffer::instance().emit(ptr + " = getelementptr i32, i32* " + bp + " , i32 " + to_string(offset));
+    int loc = CodeBuffer::instance().emit("store i32 " + value + " i32* " + ptr);
+    return loc;
+}
+string Load(int offset) {
+    string bp = RegGenerator::Instance().getCurrentBasePointer();
+    string ptr = RegGenerator::Instance().genRegister();
     string var = RegGenerator::Instance().genRegister();
-    CodeBuffer::instance().emit(var + " = " + op_str + " i32 " + left->var + " " + right->var);
-
-    if(result_type == BYTE_TYPE)
-    {
-        string new_var = RegGenerator::Instance().genRegister();
-        CodeBuffer::instance().emit(new_var + " = trunc i32 " + var + " to i8");
-        var = new_var;
-    }
-
-    ExpNode* res = new ExpNode(right->lineno, result_type, var);
-    return res;
+    CodeBuffer::instance().emit(ptr + " = getelementptr i32, i32* " + bp + " , i32 " + to_string(offset));
+    CodeBuffer::instance().emit(var + " = load i32, i32* " + ptr);
+    return var;
 }
-
-
-ExpNode *HandleIDExp(IdNode *id) {
-    try {
-        Symbol id_sym = SymbolsRepo::Instance().findSymbol(id->name);
-        if (id_sym.type.is_function) {
-            throw SymbolNotFound();
-        }
-        if(id_sym.symbol_type != LOCAL) {
-            return new ExpNode(id->lineno, id_sym.getType(), id_sym.value, id_sym.symbol_type == LITERAL);
-        }
-        // symbol is a local variable
-        string ptr = RegGenerator::Instance().genRegister();
-        string var = RegGenerator::Instance().genRegister();
-        string bp = RegGenerator::Instance().getCurrentBasePointer();
-        CodeBuffer::instance().emit(ptr + " = getelementptr i32, i32* " + bp + " , i32 " + to_string(id_sym.offset));
-        CodeBuffer::instance().emit(var + " = load i32, i32* " + ptr);
-        if(id_sym.getType() != INT_TYPE) {
-            string new_var = RegGenerator::Instance().genRegister();
-            CodeBuffer::instance().emit(new_var + " = trunc i32 " +  var + " to " + typeToString(id_sym.getType()));
-            var = new_var;
-        }
-        return new ExpNode(id->lineno, id_sym.getType(), var, id_sym.symbol_type == LITERAL);
-    }
-    catch(SymbolNotFound& e) {
-        output::errorUndef(id->lineno, id->name);
-        exit(0);
-    }
+int ZextAndStore(int offset, string value, basictype value_type) {
+    value = Zext(value, value_type);
+    return Store(offset, value);
 }
-
+string LoadAndTrunc(int offset, basictype value_type) {
+    string var = Load(offset);
+    return Trunc(var, value_type);
+}
 int handleZeroError(string var) {
 
     string cond = RegGenerator::Instance().genRegister();
@@ -95,8 +80,6 @@ int handleZeroError(string var) {
 
     return loc;
 }
-
-
 string generateValue(basictype type, string value) {
     string new_reg = RegGenerator::Instance().genRegister();
     if(type == BOOL_TYPE)
@@ -121,6 +104,21 @@ string generateValue(basictype type, string value) {
     return new_reg;
 }
 
+
+StatementNode::StatementNode(int lineno) : Node(lineno) {
+    int loc = CodeBuffer::instance().emit("br label @");
+    next_list = CodeBuffer::makelist({loc, FIRST});
+}
+StatementNode::StatementNode(int lineno, bool is_there_jump) : Node(lineno) {
+    if(is_there_jump) {
+        int loc = CodeBuffer::instance().emit("br label @");
+        next_list = CodeBuffer::makelist({loc, FIRST});
+    }
+}
+void StatementNode::MergeNextList(std::vector<std::pair<int, BranchLabelIndex>> other_list) {
+    this->next_list = CodeBuffer::merge(this->next_list, other_list);
+}
+
 StatementNode *HandleDeclaration(bool is_const, TypeNode *type, IdNode *id) {
     if(is_const) {
         output::errorConstDef(id->lineno);
@@ -130,7 +128,6 @@ StatementNode *HandleDeclaration(bool is_const, TypeNode *type, IdNode *id) {
     ExpNode* default_exp = new ExpNode(DONT_CARE, type->type, default_value, true);
     return HandleDeclarationAssignment(is_const, type, id, default_exp);
 }
-
 StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode *id, ExpNode *exp) {
 
     if((type->type != exp->type) and not (type->type == INT_TYPE and exp->type == BYTE_TYPE)) {
@@ -140,6 +137,7 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
     try {
         if(is_const and exp->is_literal) {
             SymbolsRepo::Instance().insertSymbolAsLiteral(id->name, Type(is_const, type->type), exp->getVar(true));
+            CodeBuffer::instance().emit("; literal definition here");
             return new StatementNode(exp->lineno);
         }
         else {
@@ -149,12 +147,10 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
             string ptr = RegGenerator::Instance().genRegister();
             if(exp->type != INT_TYPE)
             {
-                string new_var = RegGenerator::Instance().genRegister();
-                CodeBuffer::instance().emit(new_var + " = zext " + typeToString(exp->type) + " " + exp->getVar(false) + " to i32");
-                exp->getVar(false) = new_var;
+                exp->setVar(Zext(exp->getVar(), exp->type));
             }
-            CodeBuffer::instance().emit(ptr + " = getelementptr i32, i32* " + bp + " , i32 " + to_string(id_sym.offset));
-            CodeBuffer::instance().emit("store i32 " + exp->getVar(false) + " i32* " + ptr);
+            Store(id_sym.offset, exp->getVar());
+            return new StatementNode(exp->lineno);
         }
     }
     catch (SymbolAlreadyDefinedInScope& e) {
@@ -162,11 +158,85 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
         exit(0);
     }
 }
+StatementNode *HandleAssignment(IdNode *id, ExpNode *exp) {
+    try {
+        Symbol id_sym = SymbolsRepo::Instance().findSymbol(id->name);
+        if(id_sym.type.is_const) {
+            output::errorConstMismatch(id->lineno);
+            exit(0);
+        }
+        if((id_sym.getType() != exp->type) and not (id_sym.getType() == INT_TYPE and exp->type == BYTE_TYPE)) {
+            output::errorMismatch(exp->lineno);
+            exit(0);
+        }
 
+        ZextAndStore(id_sym.offset, exp->getVar(), exp->type);
+        return new StatementNode(exp->lineno);
 
+    }
+    catch(SymbolNotFound& e) {
+        output::errorUndef(id->lineno, id->name);
+        exit(0);
+    }
 
-BoolExpNode::BoolExpNode(int lineno, basictype type, bool value) :
-        ExpNode(lineno, type, "",true)
+}
+void HandleReturnVoid() {
+    CodeBuffer::instance().emit("ret");
+}
+StatementNode* HandleReturnExp(ExpNode* exp) {
+    try {
+        Symbol current_function = SymbolsRepo::Instance().findSymbol(SymbolsRepo::Instance().currentFunctionName);
+
+        if((current_function.getType() != exp->type and
+            not (current_function.getType() == INT_TYPE and exp->type == BYTE_TYPE)) or
+           current_function.getType() == VOID_TYPE)
+        {
+            output::errorMismatch(exp->lineno);
+            exit(0);
+        }
+        CodeBuffer::instance().emit("ret " + typeToString(exp->type) + " " + exp->getVar());
+        return new StatementNode(exp->lineno, false);
+    }
+    catch(SymbolNotFound& e) {
+        assert(false);
+    }
+}
+StatementNode* HandleBreak(int lineno) {
+    if(not SymbolsRepo::Instance().isInLoop()) {
+        output::errorUnexpectedBreak(lineno);
+        exit(0);
+    }
+    return new StatementNode(lineno);
+}
+StatementNode* HandleContinue(int lineno) {
+    if(not SymbolsRepo::Instance().isInLoop()) {
+        output::errorUnexpectedContinue(lineno);
+        exit(0);
+    }
+    return new StatementNode(lineno);
+}
+StatementNode* HandleIfStatement(BoolExpNode* exp, string label, StatementNode* s) {
+    exp->bpatchTrue(label);
+    s->MergeNextList(exp->false_list);
+    return s;
+}
+StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementNode* s1, NNode* N, string label2, StatementNode* s2) {
+    exp->bpatchTrue(label1);
+    exp->bpatchFalse(label2);
+
+    s2->MergeNextList(N->next_list);
+    s2->MergeNextList(s1->next_list);
+    return s2;
+}
+
+StatementNode* HandleWhileStatement(BoolExpNode* exp, string label, StatementNode* s) {
+    exp->bpatchTrue(label);
+    s->MergeNextList(exp->false_list);
+    return s;
+}
+
+BoolExpNode::BoolExpNode(int lineno, bool value) :
+        ExpNode(lineno, BOOL_TYPE, "",true)
 {
     int loc = CodeBuffer::instance().emit("br label @");
     ignore_label = CodeBuffer::instance().genLabel();
@@ -181,8 +251,20 @@ BoolExpNode::BoolExpNode(int lineno, basictype type, bool value) :
     }
     this->is_evaluated = false;
 }
+BoolExpNode::BoolExpNode(int lineno, std::string value) :
+        ExpNode(lineno, BOOL_TYPE, "",false /*TODO is this ok? */ ) {
 
+    string cond = RegGenerator::Instance().genRegister();
+    CodeBuffer::instance().emit(cond + " = icmp eq i1" + value + " , 1");
+    int loc = CodeBuffer::instance().emit("br i1 " + cond + ", label @, label @");
+    ignore_label = CodeBuffer::instance().genLabel();
 
+    true_list = CodeBuffer::makelist({loc,FIRST});
+    false_list = CodeBuffer::makelist({loc,SECOND});
+
+    this->is_evaluated = false;
+
+}
 void BoolExpNode::applyNOT() {
     this->is_literal = false;
     auto temp = false_list;
@@ -202,7 +284,6 @@ void BoolExpNode::applyOR(const string& right_label, BoolExpNode* right) {
     this->false_list = right->false_list;
 }
 
-
 std::string BoolExpNode::getVar(bool is_const) {
     if(this->is_evaluated)
     {
@@ -210,8 +291,8 @@ std::string BoolExpNode::getVar(bool is_const) {
     }
     if(is_const and this->is_literal)
     {
-            CodeBuffer::instance().bpatch(this->false_list,ignore_label);
-            CodeBuffer::instance().bpatch(this->true_list,ignore_label);
+        CodeBuffer::instance().bpatch(this->false_list,ignore_label);
+        CodeBuffer::instance().bpatch(this->true_list,ignore_label);
         this->is_evaluated = true;
         return var;
     }
@@ -242,24 +323,106 @@ std::string BoolExpNode::getVar(bool is_const) {
     return result_reg;
 
 }
-
 std::string BoolExpNode::getVar() {
     return getVar(false);
 }
 
+void BoolExpNode::bpatchTrue(string label) {
+    CodeBuffer::instance().bpatch(this->true_list, label);
+    true_list.clear();
+}
 
+void BoolExpNode::bpatchFalse(string label) {
+    CodeBuffer::instance().bpatch(this->false_list, label);
+    false_list.clear();
+}
 
+ExpNode* HandleBinopExp(ExpNode* left, Binop* op, ExpNode* right) {
 
+    if((left->type != INT_TYPE) and (left->type != BYTE_TYPE)) {
+        output::errorMismatch(left->lineno);
+        exit(0);
+    }
+    if((right->type != INT_TYPE) and (right->type != BYTE_TYPE)) {
+        output::errorMismatch(right->lineno);
+        exit(0);
+    }
 
+    string op_str = op->toString();
+    basictype result_type = (left->type == INT_TYPE or right->type == INT_TYPE)
+                            ? INT_TYPE
+                            : BYTE_TYPE;
 
+    if(op->type == DIV) {
+        int loc = handleZeroError(right->getVar());
+        if(left->type == BYTE_TYPE && right->type == BYTE_TYPE)
+        {
+            // TODO what about byte div int or int div byte
+            op_str = "udiv";
+        }
+        string label = CodeBuffer::instance().genLabel();
+        CodeBuffer::instance().bpatch(CodeBuffer::makelist({loc,SECOND}),label);
+    }
+    string var = RegGenerator::Instance().genRegister();
+    CodeBuffer::instance().emit(var + " = " + op_str + " i32 " + left->getVar() + " " + right->getVar());
 
+    if(result_type == BYTE_TYPE)
+    {
+        string new_var = RegGenerator::Instance().genRegister();
+        CodeBuffer::instance().emit(new_var + " = trunc i32 " + var + " to i8");
+        var = new_var;
+    }
 
-
-
-
-
-
-
-
+    ExpNode* res = new ExpNode(right->lineno, result_type, var);
+    return res;
+}
+ExpNode *HandleIDExp(IdNode *id) {
+    try {
+        Symbol id_sym = SymbolsRepo::Instance().findSymbol(id->name);
+        if (id_sym.type.is_function) {
+            throw SymbolNotFound();
+        }
+        if(id_sym.symbol_type != LOCAL) {
+            if(id_sym.getType() == BOOL_TYPE) {
+                return new BoolExpNode(id->lineno,id_sym.value);
+            }
+            return new ExpNode(id->lineno, id_sym.getType(), id_sym.value, id_sym.symbol_type == LITERAL);
+        }
+        // symbol is a local variable
+        string ptr = RegGenerator::Instance().genRegister();
+        string var = RegGenerator::Instance().genRegister();
+        string bp = RegGenerator::Instance().getCurrentBasePointer();
+        CodeBuffer::instance().emit(ptr + " = getelementptr i32, i32* " + bp + " , i32 " + to_string(id_sym.offset));
+        CodeBuffer::instance().emit(var + " = load i32, i32* " + ptr);
+        if(id_sym.getType() != INT_TYPE) {
+            string new_var = RegGenerator::Instance().genRegister();
+            CodeBuffer::instance().emit(new_var + " = trunc i32 " +  var + " to " + typeToString(id_sym.getType()));
+            var = new_var;
+        }
+        if(id_sym.getType() == BOOL_TYPE) {
+            return new BoolExpNode(id->lineno,id_sym.value);
+        }
+        return new ExpNode(id->lineno, id_sym.getType(), var, id_sym.symbol_type == LITERAL);
+    }
+    catch(SymbolNotFound& e) {
+        output::errorUndef(id->lineno, id->name);
+        exit(0);
+    }
+}
+BoolExpNode* HandleRelopExp(ExpNode* left, reloptype type , ExpNode* right) {
+    if((left->type != INT_TYPE) and (left->type != BYTE_TYPE)) {
+        output::errorMismatch(left->lineno);
+        exit(0);
+    }
+    if((right->type != INT_TYPE) and (right->type != BYTE_TYPE)) {
+        output::errorMismatch(right->lineno);
+        exit(0);
+    }
+    string right_reg = Zext(right->getVar(), right->type);
+    string left_reg = Zext(left->getVar(), left->type);
+    string cond = RegGenerator::Instance().genRegister();
+    CodeBuffer::instance().emit(cond + " = icmp " + RelopTypeToString(type) + " i32" + left_reg + " , " + right_reg);
+    return new BoolExpNode(right->lineno, cond);
+}
 
 

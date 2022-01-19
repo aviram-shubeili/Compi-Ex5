@@ -158,15 +158,19 @@ FormalDecl: TypeAnnotation Type ID
 /* ******************************************************************************************** */
 Statements: Statement
 {
+  $$ = $1;
 } ;
 /* ******************************************************************************************** */
 Statements: Statements Statement
 {
+    $$ = $1;
+    ((StatementNode*)$$)->MergeNextList(((StatementNode*)$2));
 } ;
 /* ******************************************************************************************** */
 Statement: { SymbolsRepo::Instance().openNewScope(); } LBRACE Statements RBRACE
  {
    SymbolsRepo::Instance().closeScope();
+   $$ = $3;
  } ;
 /* ******************************************************************************************** */
 Statement: TypeAnnotation Type ID SC
@@ -181,26 +185,13 @@ Statement: TypeAnnotation Type ID ASSIGN Exp SC
 /* ******************************************************************************************** */
 Statement: ID ASSIGN Exp SC
 {
-    try {
-      Symbol id_sym = SymbolsRepo::Instance().findSymbol(((IdNode*)$1)->name);
-      if(id_sym.type.is_const) {
-        output::errorConstMismatch($1->lineno);
-        exit(0);
-      }
-      if((id_sym.getType() != ((ExpNode*)$3)->type) and not (id_sym.getType() == INT_TYPE and ((ExpNode*)$3)->type == BYTE_TYPE)) {
-          output::errorMismatch($3->lineno);
-          exit(0);
-      }
-    }
-    catch(SymbolNotFound& e) {
-      output::errorUndef($1->lineno, ((IdNode*)$1)->name);
-      exit(0);
-    }
-
+    $$ = HandleAssignment(((IdNode*)$1), ((ExpNode*)$3));
 } ;
 /* ******************************************************************************************** */
 Statement: Call SC
-{ } ;
+{
+  // TODO
+} ;
 /* ******************************************************************************************** */
 Statement: RETURN SC
 {
@@ -214,73 +205,62 @@ Statement: RETURN SC
     catch(SymbolNotFound& e) {
       assert(false);
     }
+    HandleReturnVoid();
+    $$ = new StatementNode($2.lineno, false);
  } ;
 /* ******************************************************************************************** */
 Statement: RETURN Exp SC
 {
-  try {
-    Symbol current_function = SymbolsRepo::Instance().findSymbol(SymbolsRepo::Instance().currentFunctionName);
-    if((current_function.getType() != ((ExpNode*)$2)->type and
-        not (current_function.getType() == INT_TYPE and ((ExpNode*)$2)->type == BYTE_TYPE)) or
-        current_function.getType() == VOID_TYPE) {
-      output::errorMismatch($1->lineno);
-      exit(0);
-    }
-  }
-  catch(SymbolNotFound& e) {
-    assert(false);
-  }
-
+    $$ = HandleReturnExp(((ExpNode*)$2));
 } ;
 /* ******************************************************************************************** */
 Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement %prec IF
- {
+ { // TODO
    SymbolsRepo::Instance().closeScope();
+
+   $$ = HandleIfStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6));
  } ;
  /* ******************************************************************************************** */
-Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement ELSE
-                              {
+Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement N ELSE
+                              { // TODO
                                  SymbolsRepo::Instance().closeScope();
                                  SymbolsRepo::Instance().openNewScope();
                               }
-Statement
- {
+M Statement
+ { // TODO
    SymbolsRepo::Instance().closeScope();
+
+  $$ = HandleIfElseStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6), ((NNode*)$7), ((MNode*)$10)->label, ((StatementNode*)$11));
  } ;
  /* ******************************************************************************************** */
-Statement: WHILE LPAREN Exp RPAREN
-                                  {
+Statement: WHILE M LPAREN Exp RPAREN
+                                  {  // TODO
                                      if(((ExpNode*)$3)->type != BOOL_TYPE) {
                                        output::errorMismatch($3->lineno);
                                        exit(0);
                                      }
                                      SymbolsRepo::Instance().openNewScope();
                                      SymbolsRepo::Instance().openLoop();
+                                     $$ = new MNode();
                                   }
  Statement
- {
+ {  // TODO
       SymbolsRepo::Instance().closeScope();
       SymbolsRepo::Instance().closeLoop();
  } ;
  /* ******************************************************************************************** */
 Statement: BREAK SC
  {
-    if(not SymbolsRepo::Instance().isInLoop()) {
-      output::errorUnexpectedBreak($1->lineno);
-      exit(0);
-    }
+    $$ = HandleBreak($1->lineno);
  } ;
  /* ******************************************************************************************** */
 Statement: CONTINUE SC
  {
-   if(not SymbolsRepo::Instance().isInLoop()) {
-     output::errorUnexpectedContinue($1->lineno);
-     exit(0);
-   }
+    $$ = HandleContinue($1->lineno);
  } ;
  /* ******************************************************************************************** */
 Call: ID LPAREN ExpList RPAREN
- {  
+ { //TODO
    try {
      Symbol id_sym = SymbolsRepo::Instance().findSymbol(((IdNode*)$1)->name);
      if(not id_sym.type.is_function) {
@@ -300,7 +280,7 @@ Call: ID LPAREN ExpList RPAREN
  } ;
  /* ******************************************************************************************** */
 Call: ID LPAREN RPAREN
- {
+ { //TODO
    try {
      Symbol id_sym = SymbolsRepo::Instance().findSymbol(((IdNode*)$1)->name);
      if(not id_sym.type.is_function) {
@@ -360,6 +340,7 @@ TypeAnnotation: CONST
 Exp: LPAREN Exp RPAREN
   {
     $$ = $2;
+    ((ExpNode*)$$)->is_literal = false;
   } ;
   /* ******************************************************************************************** */
 Exp: Exp MULDIV_BINOP Exp
@@ -379,12 +360,13 @@ Exp: ID
   /* ******************************************************************************************** */
 Exp: Call
   {
+    // TODO
     $$ = new ExpNode($1->lineno, ((CallNode*)$1)->type);
   } ;
   /* ******************************************************************************************** */
 Exp: NUM
   {
-    $$ = new ExpNode($1->lineno, INT_TYPE,((NumNode*)$1)->value,true);
+    $$ = new ExpNode($1->lineno, INT_TYPE,((NumNode*)$1)->value, true);
   } ;
   /* ******************************************************************************************** */
 Exp: NUM B
@@ -393,7 +375,7 @@ Exp: NUM B
         output::errorByteTooLarge($1->lineno, ((NumNode*)$1)->value);
         exit(0);
     }
-    $$ = new ExpNode($1->lineno, BYTE_TYPE,((NumNode*)$1)->value,true);
+    $$ = new ExpNode($1->lineno, BYTE_TYPE,((NumNode*)$1)->value, true);
   } ;
   /* ******************************************************************************************** */
 Exp: STRING
@@ -404,12 +386,12 @@ Exp: STRING
   /* ******************************************************************************************** */
 Exp: TRUE
   {
-    $$ = new BoolExpNode($1->lineno, BOOL_TYPE, true);
+    $$ = new BoolExpNode($1->lineno, true);
   } ;
   /* ******************************************************************************************** */
 Exp: FALSE
   {
-   $$ = new BoolExpNode($1->lineno, BOOL_TYPE, false);
+   $$ = new BoolExpNode($1->lineno, false);
   } ;
   /* ******************************************************************************************** */
 Exp: NOT Exp
@@ -453,28 +435,12 @@ Exp: Exp OR M Exp
   /* ******************************************************************************************** */
 Exp: Exp RELATIONAL Exp
   {
-    if((((ExpNode*)$1)->type != INT_TYPE) and (((ExpNode*)$1)->type != BYTE_TYPE)) {
-      output::errorMismatch($1->lineno);
-      exit(0);
-    }
-    if((((ExpNode*)$3)->type != INT_TYPE) and (((ExpNode*)$3)->type != BYTE_TYPE)) {
-      output::errorMismatch($3->lineno);
-      exit(0);
-    }
-    $$ = new ExpNode($3->lineno, BOOL_TYPE);
+    $$ = HandleRelopExp(((ExpNode*)$1),((Relop*)$2)->type , ((ExpNode*)$3));
   } ;
   /* ******************************************************************************************** */
 Exp: Exp EQUALITY Exp
   {
-    if(((ExpNode*)$1)->type != INT_TYPE and ((ExpNode*)$1)->type != BYTE_TYPE) {
-      output::errorMismatch($1->lineno);
-      exit(0);
-    }
-    if(((ExpNode*)$3)->type != INT_TYPE and ((ExpNode*)$3)->type != BYTE_TYPE) {
-      output::errorMismatch($3->lineno);
-      exit(0);
-    }
-    $$ = new ExpNode($3->lineno, BOOL_TYPE);
+    $$ = HandleRelopExp(((ExpNode*)$1),((Relop*)$2)->type , ((ExpNode*)$3));
   } ;
   /* ******************************************************************************************** */
 Exp: LPAREN Type RPAREN
@@ -490,7 +456,7 @@ Exp: LPAREN Type RPAREN
       output::errorMismatch($5->lineno);
       exit(0);
     }
-    $$ = new ExpNode($5->lineno, ((TypeNode*)$2)->type);
+    $$ = new ExpNode($5->lineno, ((TypeNode*)$2)->type, ((ExpNode*)$5)->getVal(), false);
   } ;
   /* ******************************************************************************************** */
   M_IF_OPEN_SCOPE: /* epsilon */
@@ -500,24 +466,17 @@ Exp: LPAREN Type RPAREN
        exit(0);
      }
      SymbolsRepo::Instance().openNewScope();
+     $$ = new MNode();
   };
   /* ******************************************************************************************** */
   M: /* epsilon */
   {
-     if(((ExpNode*)$-1)->type != BOOL_TYPE) {
-       output::errorMismatch($-1->lineno);
-       exit(0);
-     }
-     SymbolsRepo::Instance().openNewScope();
+      $$ = new MNode();
   };
   /* ******************************************************************************************** */
   N: /* epsilon */
   {
-     if(((ExpNode*)$-1)->type != BOOL_TYPE) {
-       output::errorMismatch($-1->lineno);
-       exit(0);
-     }
-     SymbolsRepo::Instance().openNewScope();
+      $$ = new NNode();
   };
   /* ******************************************************************************************** */
 %%

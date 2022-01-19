@@ -23,7 +23,7 @@ public:
     }
 };
 
-class BoolExpNode : ExpNode {
+class BoolExpNode : public ExpNode {
     bool is_evaluated;
     std::string ignore_label;
 public:
@@ -32,7 +32,8 @@ public:
     void applyOR(const string& right_label, BoolExpNode* right);
     std::vector<std::pair<int,BranchLabelIndex>> true_list;
     std::vector<std::pair<int,BranchLabelIndex>> false_list;
-    BoolExpNode(int lineno, basictype type, bool value);
+    BoolExpNode(int lineno, bool value);
+    BoolExpNode(int lineno, std::string value);
 //    BoolExpNode(int lineno, basictype type, std::vector<std::pair<int,BranchLabelIndex>> true_list, std::vector<std::pair<int,BranchLabelIndex>> false_list)
 //            : ExpNode(lineno, type, RegGenerator::Instance().genRegister()),
 //              true_list(true_list),
@@ -40,15 +41,22 @@ public:
 //    {}
     std::string getVar() override;
     std::string getVar(bool is_const) override;
+    void bpatchTrue(string label);
+    void bpatchFalse(string label);
 
 };
 
 class StatementNode : public Node {
 public:
     std::vector<std::pair<int,BranchLabelIndex>> next_list;
-    explicit StatementNode(int lineno) : Node(lineno) {}
+    void MergeNextList(StatementNode* other);
+    void MergeNextList(std::vector<std::pair<int,BranchLabelIndex>> other_list);
+    explicit StatementNode(int lineno);
+    StatementNode(int lineno, bool is_there_jump);
 };
 
+string Zext(string reg, basictype type);
+string Trunc(string reg, basictype type);
 
 string typeToString(basictype type);
 ExpNode* HandleBinopExp(ExpNode* left, Binop* op, ExpNode* right);

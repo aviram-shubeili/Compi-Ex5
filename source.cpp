@@ -61,3 +61,7 @@ std::string ExpNode::getVar(bool is_const) {
 std::string ExpNode::getVar() {
     return var;
 }
+
+void ExpNode::setVar(string new_var) {
+    var = std::move(new_var);
+}
