@@ -39,6 +39,20 @@ std::vector<Type> FormalsNode::getArgumentsTypes() {
     return result;
 }
 
+std::string FormalsNode::argListToString() {
+    if(this->arguments.empty()) {
+        return "()";
+    }
+    string result = "(";
+    for( Symbol& arg : arguments) {
+        result += typeToString(arg.getType());
+        result += ",";
+    }
+    result[result.length()-1] = ')';
+
+    return result;
+}
+
 FormalDeclNode::FormalDeclNode(int lineno, bool is_const, basictype type, std::string name) : Node(lineno),
                                                                                               arg(Symbol(name, Type(is_const,type),ARGUMENT,"")) {}
 

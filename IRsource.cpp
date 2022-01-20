@@ -96,6 +96,44 @@ string generateValue(basictype type, string value) {
     return new_reg;
 }
 
+void ImplementPrintingFunctions() {
+    
+    CodeBuffer::instance().emit("declare i32 @printf(i8*, ...)                                                  ");
+    CodeBuffer::instance().emit("declare void @exit(i32)                                                        ");
+    CodeBuffer::instance().emitGlobal("@.int_specifier = constant [4 x i8] c\"%d\\0A\\00\"                       ");
+    CodeBuffer::instance().emitGlobal("@.str_specifier = constant [4 x i8] c\"%s\\0A\\00\"                       ");
+    CodeBuffer::instance().emit("                                                                               ");
+    CodeBuffer::instance().emit("define void @printi(i32) {                                                     ");
+    CodeBuffer::instance().emit("    %spec_ptr = getelementptr [4 x i8], [4 x i8]* @.int_specifier, i32 0, i32 0");
+    CodeBuffer::instance().emit("    call i32 (i8*, ...) @printf(i8* %spec_ptr, i32 %0)                         ");
+    CodeBuffer::instance().emit("    ret void                                                                   ");
+    CodeBuffer::instance().emit("}                                                                              ");
+    CodeBuffer::instance().emit("                                                                               ");
+    CodeBuffer::instance().emit("define void @print(i8*) {                                                      ");
+    CodeBuffer::instance().emit("    %spec_ptr = getelementptr [4 x i8], [4 x i8]* @.str_specifier, i32 0, i32 0");
+    CodeBuffer::instance().emit("    call i32 (i8*, ...) @printf(i8* %spec_ptr, i8* %0)                         ");
+    CodeBuffer::instance().emit("    ret void                                                                   ");
+    CodeBuffer::instance().emit("}                                                                              ");
+
+}
+
+void HandleFunctionDeclaration(RetTypeNode* return_type, IdNode* id, FormalsNode* formals) {
+
+    try {
+        SymbolsRepo::Instance().insertSymbol(id->name, (Type(return_type->type, formals->getArgumentsTypes())));
+        SymbolsRepo::Instance().currentFunctionName = id->name;
+        SymbolsRepo::Instance().openNewScope();
+
+        for(auto& arg : formals->arguments) {
+            SymbolsRepo::Instance().insertSymbolAsArgument(arg.name, arg);
+        }
+    }
+    catch (SymbolAlreadyDefinedInScope& e) {
+        output::errorDef(id->lineno, id->name);
+        exit(0);
+    }
+    CodeBuffer::instance().emit("define " + typeToString(return_type->type) + "@" + id->name + formals->argListToString() + " {");
+}
 
 StatementNode::StatementNode(int lineno) : Node(lineno) {
     int loc = CodeBuffer::instance().emit("br label @");
@@ -216,11 +254,10 @@ StatementNode* HandleIfStatement(BoolExpNode* exp, string label, StatementNode* 
     s->MergeNextList(exp->false_list);
     return s;
 }
-StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementNode* s1, NNode* N, string label2, StatementNode* s2) {
+StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementNode* s1, string label2, StatementNode* s2) {
     exp->bpatchTrue(label1);
     exp->bpatchFalse(label2);
 
-    s2->MergeNextList(N->next_list);
     s2->MergeNextList(s1->next_list);
     return s2;
 }
@@ -392,7 +429,6 @@ ExpNode* HandleBinopExp(ExpNode* left, Binop* op, ExpNode* right) {
         int loc = handleZeroError(right->getVar());
         if(left->type == BYTE_TYPE && right->type == BYTE_TYPE)
         {
-            // TODO what about byte div int or int div byte
             op_str = "udiv";
         }
         string label = CodeBuffer::instance().genLabel();

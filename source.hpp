@@ -44,6 +44,7 @@ public:
     FormalsNode(int num, std::vector<Symbol> args);
     FormalsNode() : Node(DONT_CARE) {}
     std::vector<Type> getArgumentsTypes();
+    std::string argListToString();
 };
 class FormalsListNode : public Node {
 public:

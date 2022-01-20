@@ -65,7 +65,6 @@ void yyerror(const char*);
 /* Rules */
 Program: M_Init Funcs
  {
-  // TODO
   if(yychar == YYEOF) {
     try {
         Symbol main_symbol = SymbolsRepo::Instance().findSymbol("main");
@@ -87,6 +86,7 @@ Program: M_Init Funcs
 M_Init: /*epsilon*/
  {
   SymbolsRepo::Instance().Initialize();
+  ImplementPrintingFunctions();
  } ;
 /* ******************************************************************************************** */
 
@@ -99,26 +99,14 @@ Funcs: FuncDecl Funcs
  /* ******************************************************************************************** */
 FuncDecl: RetType ID LPAREN Formals RPAREN
                                             {
-                                              // TODO
-                                              try {
-                                                SymbolsRepo::Instance().insertSymbol(((IdNode*)$2)->name, (Type(((RetTypeNode*)$1)->type, ((FormalsNode*)$4)->getArgumentsTypes())));
-                                                SymbolsRepo::Instance().currentFunctionName = ((IdNode*)$2)->name;
-                                                SymbolsRepo::Instance().openNewScope();
-
-                                                for(auto& arg : ((FormalsNode*)$4)->arguments) {
-                                                  SymbolsRepo::Instance().insertSymbolAsArgument(arg.name, arg);
-                                                }
-                                              }
-                                              catch (SymbolAlreadyDefinedInScope& e) {
-                                                 output::errorDef($2->lineno, ((IdNode*)$2)->name);
-                                                 exit(0);
-                                              }
+                                              HandleFunctionDeclaration(((RetTypeNode*)$1), ((IdNode*)$2), (FormalsNode*)$4));
                                             }
 
  LBRACE Statements RBRACE
  {
     SymbolsRepo::Instance().currentFunctionName = "";
     SymbolsRepo::Instance().closeScope();
+    CodeBuffer::instance().emit("}");
  } ;
 
 /* ******************************************************************************************** */
@@ -133,30 +121,30 @@ RetType: VOID
  } ;
 /* ******************************************************************************************** */
 Formals: /*epsilon*/
-{ //TODO
+ {
   $$ = new FormalsNode();
  } ;
 /* ******************************************************************************************** */
 Formals: FormalsList
-{ //TODO
+ {
   $$ = new FormalsNode($1->lineno, ((FormalsListNode*)$1)->args);
  } ;
 /* ******************************************************************************************** */
 FormalsList: FormalDecl
-{ //TODO
+ {
     $$ = new FormalsListNode($1->lineno,  {((FormalDeclNode*)$1)->arg} );
  } ;
 /* ******************************************************************************************** */
 FormalsList: FormalDecl COMMA FormalsList
-{ //TODO
+ {
     $$ = $3;
     ((FormalsListNode*)$$)->addArgument($1->lineno, ((FormalDeclNode*)$1)->arg);
  } ;
 /* ******************************************************************************************** */
 FormalDecl: TypeAnnotation Type ID
-{  //TODO
+ {
     $$ = new FormalDeclNode($3->lineno, ((TypeAnnotationNode*)$1)->is_const, ((TypeNode*)$2)->type, ((IdNode*)$3)->name );
-} ;
+ } ;
 /* ******************************************************************************************** */
 Statements: Statement
  {
@@ -225,8 +213,8 @@ Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement %prec IF
    $$ = HandleIfStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6));
  } ;
  /* ******************************************************************************************** */
-Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement N ELSE
-                              { // TODO do we need the N before the else?
+Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement ELSE
+                              {
                                  SymbolsRepo::Instance().closeScope();
                                  SymbolsRepo::Instance().openNewScope();
                               }
@@ -234,7 +222,7 @@ M Statement
   {
    SymbolsRepo::Instance().closeScope();
 
-  $$ = HandleIfElseStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6), ((NNode*)$7), ((MNode*)$10)->label, ((StatementNode*)$11));
+  $$ = HandleIfElseStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6), ((MNode*)$9)->label, ((StatementNode*)$10));
  } ;
  /* ******************************************************************************************** */
 Statement: WHILE M LPAREN Exp RPAREN
