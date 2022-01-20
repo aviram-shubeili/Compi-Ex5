@@ -49,7 +49,7 @@ public:
 class StatementNode : public Node {
 public:
     std::vector<std::pair<int,BranchLabelIndex>> next_list;
-    void MergeNextList(StatementNode* other);
+    void bpatchNextList(string label);
     void MergeNextList(std::vector<std::pair<int,BranchLabelIndex>> other_list);
     explicit StatementNode(int lineno);
     StatementNode(int lineno, bool is_there_jump);
@@ -58,13 +58,13 @@ public:
 string Zext(string reg, basictype type);
 string Trunc(string reg, basictype type);
 
-string typeToString(basictype type);
+
 ExpNode* HandleBinopExp(ExpNode* left, Binop* op, ExpNode* right);
 ExpNode* HandleIDExp(IdNode* id);
 StatementNode* HandleDeclaration(bool is_const, TypeNode* type, IdNode* id);
 StatementNode* HandleDeclarationAssignment(bool is_const, TypeNode* type, IdNode* id, ExpNode* exp);
 string generateValue(basictype type, string value);
 int handleZeroError(string var);
-
+CallNode* HandleFunctionCall(IdNode* func_id, ExpListNode* expList = new ExpListNode(DONT_CARE));
 
 #endif //COMPI_EX5_IRSOURCE_H

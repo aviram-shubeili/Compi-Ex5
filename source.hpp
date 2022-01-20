@@ -21,6 +21,8 @@ enum binoptype {
     DIV
 };
 
+string typeToString(basictype type);
+
 class Node {
 public:
     int lineno;
@@ -77,13 +79,17 @@ public:
 class ExpListNode : public Node {
 public:
     std::vector<Type> types;
-    ExpListNode(int lineno) : Node(lineno) {}
-    void addExp(basictype type);
+    std::vector<ExpNode*> expressions;
+    explicit ExpListNode(int lineno) : Node(lineno) {}
+    std::string argListToString();
+    void addExp(ExpNode* exp);
 };
+
 class CallNode : public Node {
 public:
     basictype type;
-    CallNode(int lineno, basictype type) : Node(lineno), type(type) {}
+    string value;
+    CallNode(int lineno, basictype type, string value) : Node(lineno), type(type), value(value) {}
 };
 class Relop : public Node {
 public:

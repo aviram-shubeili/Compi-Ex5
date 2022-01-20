@@ -7,14 +7,6 @@ int ZextAndStore(int offset, string value, basictype value_type);
 int Store(int offset, string value);
 using namespace std;
 
-string typeToString(basictype type) {
-    switch (type) {
-        case INT_TYPE: return " i32 ";
-        case BYTE_TYPE: return " i8 ";
-        case BOOL_TYPE: return " i1 ";
-        default: assert(false);
-    }
-}
 string RelopTypeToString(reloptype type) {
     switch (type) {
         case EQUALS: return " eq ";
@@ -119,6 +111,11 @@ void StatementNode::MergeNextList(std::vector<std::pair<int, BranchLabelIndex>> 
     this->next_list = CodeBuffer::merge(this->next_list, other_list);
 }
 
+void StatementNode::bpatchNextList(string label) {
+    CodeBuffer::instance().bpatch(next_list, label);
+    next_list.clear();
+}
+
 StatementNode *HandleDeclaration(bool is_const, TypeNode *type, IdNode *id) {
     if(is_const) {
         output::errorConstDef(id->lineno);
@@ -172,7 +169,6 @@ StatementNode *HandleAssignment(IdNode *id, ExpNode *exp) {
 
         ZextAndStore(id_sym.offset, exp->getVar(), exp->type);
         return new StatementNode(exp->lineno);
-
     }
     catch(SymbolNotFound& e) {
         output::errorUndef(id->lineno, id->name);
@@ -228,12 +224,51 @@ StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementN
     s2->MergeNextList(s1->next_list);
     return s2;
 }
+StatementNode* HandleWhileStatement(string cond_label, BoolExpNode* exp, string s_label, StatementNode* s) {
+    StatementNode* result = new StatementNode(s->lineno, false);
+    // if cond is false goto next statement
+    result->next_list = exp->false_list;
+    // if true do s..
+    exp->bpatchTrue(s_label);
+    // after s check cond again
+    s->bpatchNextList(cond_label);
 
-StatementNode* HandleWhileStatement(BoolExpNode* exp, string label, StatementNode* s) {
-    exp->bpatchTrue(label);
-    s->MergeNextList(exp->false_list);
-    return s;
+    // TODO do we need this next line?
+    // CodeBuffer::instance().emit("br label " + cond_label );
+    return result;
 }
+
+
+CallNode* HandleFunctionCall(IdNode* func_id, ExpListNode* expList) {
+    try {
+        Symbol id_sym = SymbolsRepo::Instance().findSymbol(func_id->name);
+        if(not id_sym.type.is_function) {
+            throw SymbolNotFound();
+        }
+        std::vector<Type> empty_arg_list;
+        if(not hasSameArguments(id_sym.type.arguments, empty_arg_list)) {
+            std::vector<std::string> args_as_strings = id_sym.type.getArgumentsAsStrings();
+            output::errorPrototypeMismatch(func_id->lineno, func_id->name, args_as_strings);
+            exit(0);
+        }
+        string openning;
+        string result_reg;
+        if(id_sym.getType() != VOID_TYPE) {
+            result_reg = RegGenerator::Instance().genRegister();
+            openning = result_reg + " = ";
+        }
+        CodeBuffer::instance().emit(openning + "call" + typeToString(id_sym.getType()) + "@" + func_id->name + expList->argListToString());
+
+        return new CallNode(func_id->lineno, id_sym.getType(), result_reg);
+    }
+    catch(SymbolNotFound& e) {
+        output::errorUndefFunc(func_id->lineno, func_id->name);
+        exit(0);
+    }
+}
+
+
+
 
 BoolExpNode::BoolExpNode(int lineno, bool value) :
         ExpNode(lineno, BOOL_TYPE, "",true)

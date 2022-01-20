@@ -64,7 +64,8 @@ void yyerror(const char*);
 %%
 /* Rules */
 Program: M_Init Funcs
-{
+ {
+  // TODO
   if(yychar == YYEOF) {
     try {
         Symbol main_symbol = SymbolsRepo::Instance().findSymbol("main");
@@ -79,18 +80,18 @@ Program: M_Init Funcs
     SymbolsRepo::Instance().closeScope();
   }
 
-} ;
+ } ;
 
 /* ******************************************************************************************** */
 
 M_Init: /*epsilon*/
-{
+ {
   SymbolsRepo::Instance().Initialize();
-} ;
+ } ;
 /* ******************************************************************************************** */
 
 Funcs: /*epsilon*/
-{  } ;
+ {  } ;
 /* ******************************************************************************************** */
 
 Funcs: FuncDecl Funcs
@@ -98,6 +99,7 @@ Funcs: FuncDecl Funcs
  /* ******************************************************************************************** */
 FuncDecl: RetType ID LPAREN Formals RPAREN
                                             {
+                                              // TODO
                                               try {
                                                 SymbolsRepo::Instance().insertSymbol(((IdNode*)$2)->name, (Type(((RetTypeNode*)$1)->type, ((FormalsNode*)$4)->getArgumentsTypes())));
                                                 SymbolsRepo::Instance().currentFunctionName = ((IdNode*)$2)->name;
@@ -126,46 +128,48 @@ RetType: Type
  };
 /* ******************************************************************************************** */
 RetType: VOID
-{
+ {
     $$ = new RetTypeNode($1->lineno, VOID_TYPE);
  } ;
 /* ******************************************************************************************** */
 Formals: /*epsilon*/
-{
+{ //TODO
   $$ = new FormalsNode();
  } ;
 /* ******************************************************************************************** */
 Formals: FormalsList
-{
+{ //TODO
   $$ = new FormalsNode($1->lineno, ((FormalsListNode*)$1)->args);
  } ;
 /* ******************************************************************************************** */
 FormalsList: FormalDecl
-{
+{ //TODO
     $$ = new FormalsListNode($1->lineno,  {((FormalDeclNode*)$1)->arg} );
  } ;
 /* ******************************************************************************************** */
 FormalsList: FormalDecl COMMA FormalsList
-{
+{ //TODO
     $$ = $3;
     ((FormalsListNode*)$$)->addArgument($1->lineno, ((FormalDeclNode*)$1)->arg);
  } ;
 /* ******************************************************************************************** */
 FormalDecl: TypeAnnotation Type ID
-{
+{  //TODO
     $$ = new FormalDeclNode($3->lineno, ((TypeAnnotationNode*)$1)->is_const, ((TypeNode*)$2)->type, ((IdNode*)$3)->name );
 } ;
 /* ******************************************************************************************** */
 Statements: Statement
-{
+ {
   $$ = $1;
-} ;
+ } ;
 /* ******************************************************************************************** */
-Statements: Statements Statement
-{
-    $$ = $1;
-    ((StatementNode*)$$)->MergeNextList(((StatementNode*)$2));
-} ;
+Statements: Statements M Statement
+ {
+
+    ((StatementNode*)$1)->bpatchNextList(((MNode*)$2)->label);
+    $$ = $3;
+
+ } ;
 /* ******************************************************************************************** */
 Statement: { SymbolsRepo::Instance().openNewScope(); } LBRACE Statements RBRACE
  {
@@ -174,9 +178,9 @@ Statement: { SymbolsRepo::Instance().openNewScope(); } LBRACE Statements RBRACE
  } ;
 /* ******************************************************************************************** */
 Statement: TypeAnnotation Type ID SC
-{
+ {
     $$ = HandleDeclaration(((TypeNode*)$2), ((IdNode*)$3));
-};
+ };
 /* ******************************************************************************************** */
 Statement: TypeAnnotation Type ID ASSIGN Exp SC
  {
@@ -184,17 +188,17 @@ Statement: TypeAnnotation Type ID ASSIGN Exp SC
  } ;
 /* ******************************************************************************************** */
 Statement: ID ASSIGN Exp SC
-{
+ {
     $$ = HandleAssignment(((IdNode*)$1), ((ExpNode*)$3));
-} ;
+ } ;
 /* ******************************************************************************************** */
 Statement: Call SC
-{
-  // TODO
-} ;
+ {
+  $$ = new StatementNode($2.lineno);
+ } ;
 /* ******************************************************************************************** */
 Statement: RETURN SC
-{
+ {
   	try {
       Symbol current_function = SymbolsRepo::Instance().findSymbol(SymbolsRepo::Instance().currentFunctionName);
       if(current_function.getType() != VOID_TYPE) {
@@ -210,31 +214,31 @@ Statement: RETURN SC
  } ;
 /* ******************************************************************************************** */
 Statement: RETURN Exp SC
-{
+ {
     $$ = HandleReturnExp(((ExpNode*)$2));
-} ;
+ } ;
 /* ******************************************************************************************** */
 Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement %prec IF
- { // TODO
+ {
    SymbolsRepo::Instance().closeScope();
 
    $$ = HandleIfStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6));
  } ;
  /* ******************************************************************************************** */
 Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement N ELSE
-                              { // TODO
+                              { // TODO do we need the N before the else?
                                  SymbolsRepo::Instance().closeScope();
                                  SymbolsRepo::Instance().openNewScope();
                               }
 M Statement
- { // TODO
+  {
    SymbolsRepo::Instance().closeScope();
 
   $$ = HandleIfElseStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6), ((NNode*)$7), ((MNode*)$10)->label, ((StatementNode*)$11));
  } ;
  /* ******************************************************************************************** */
 Statement: WHILE M LPAREN Exp RPAREN
-                                  {  // TODO
+                                  {
                                      if(((ExpNode*)$3)->type != BOOL_TYPE) {
                                        output::errorMismatch($3->lineno);
                                        exit(0);
@@ -244,9 +248,10 @@ Statement: WHILE M LPAREN Exp RPAREN
                                      $$ = new MNode();
                                   }
  Statement
- {  // TODO
+ {
       SymbolsRepo::Instance().closeScope();
       SymbolsRepo::Instance().closeLoop();
+      $$ = HandleWhileStatement(((MNode*)$2)->label, ((BoolExpNode*)$4), ((MNode*)$6)->label, ((StatementNode*)$7));
  } ;
  /* ******************************************************************************************** */
 Statement: BREAK SC
@@ -260,56 +265,25 @@ Statement: CONTINUE SC
  } ;
  /* ******************************************************************************************** */
 Call: ID LPAREN ExpList RPAREN
- { //TODO
-   try {
-     Symbol id_sym = SymbolsRepo::Instance().findSymbol(((IdNode*)$1)->name);
-     if(not id_sym.type.is_function) {
-        throw SymbolNotFound();
-     }
-     if(not hasSameArguments(id_sym.type.arguments, ((ExpListNode*)$3)->types)) {
-       std::vector<std::string> args_as_strings = id_sym.type.getArgumentsAsStrings();
-       output::errorPrototypeMismatch($1->lineno, ((IdNode*)$1)->name, args_as_strings);
-       exit(0);
-     }
-     $$ = new CallNode($4->lineno, id_sym.getType());
-   }
-   catch(SymbolNotFound& e) {
-     output::errorUndefFunc($1->lineno, ((IdNode*)$1)->name);
-     exit(0);
-   }
+ {
+   $$ = HandleFunctionCall(((IdNode*)$1), ((ExpListNode*)$3));
  } ;
  /* ******************************************************************************************** */
 Call: ID LPAREN RPAREN
- { //TODO
-   try {
-     Symbol id_sym = SymbolsRepo::Instance().findSymbol(((IdNode*)$1)->name);
-     if(not id_sym.type.is_function) {
-        throw SymbolNotFound();
-     }
-     std::vector<Type> empty_arg_list;
-     if(not hasSameArguments(id_sym.type.arguments, empty_arg_list)) {
-       std::vector<std::string> args_as_strings = id_sym.type.getArgumentsAsStrings();
-       output::errorPrototypeMismatch($1->lineno, ((IdNode*)$1)->name, args_as_strings);
-       exit(0);
-     }
-     $$ = new CallNode($3->lineno, id_sym.getType());
-   }
-   catch(SymbolNotFound& e) {
-     output::errorUndefFunc($1->lineno, ((IdNode*)$1)->name);
-     exit(0);
-   }
+ {
+   $$ = HandleFunctionCall(((IdNode*)$1));
  } ;
  /* ******************************************************************************************** */
 ExpList: Exp
  {
     $$ = new ExpListNode($1->lineno);
-    ((ExpListNode*)$$)->addExp(((ExpNode*)$1)->type);
+    ((ExpListNode*)$$)->addExp(((ExpNode*)$1));
  } ;
  /* ******************************************************************************************** */
 ExpList: Exp COMMA ExpList
  {
     $$ = $3;
-    ((ExpListNode*)$$)->addExp(((ExpNode*)$1)->type);
+    ((ExpListNode*)$$)->addExp(((ExpNode*)$1));
  } ;
  /* ******************************************************************************************** */
 Type: INT
@@ -328,14 +302,14 @@ Type: BOOL
  } ;
  /* ******************************************************************************************** */
 TypeAnnotation: /*epsilon*/
-{
+  {
    $$ = new TypeAnnotationNode(false);
-} ;
+  } ;
 /* ******************************************************************************************** */
 TypeAnnotation: CONST
-{
+  {
   $$ = new TypeAnnotationNode(true, $1->lineno);
-} ;
+  } ;
 /* ******************************************************************************************** */
 Exp: LPAREN Exp RPAREN
   {
@@ -360,8 +334,7 @@ Exp: ID
   /* ******************************************************************************************** */
 Exp: Call
   {
-    // TODO
-    $$ = new ExpNode($1->lineno, ((CallNode*)$1)->type);
+    $$ = new ExpNode($1->lineno, ((CallNode*)$1)->type, ((CallNode*)$1)->value);
   } ;
   /* ******************************************************************************************** */
 Exp: NUM
