@@ -59,6 +59,7 @@ FormalDeclNode::FormalDeclNode(int lineno, bool is_const, basictype type, std::s
 
 void ExpListNode::addExp(ExpNode *exp) {
     expressions.push_back(exp);
+    types.emplace_back(exp->type);
 }
 
 std::string ExpListNode::argListToString() {
@@ -87,6 +88,7 @@ std::string Binop::toString() {
         case MINUS: return "sub";
         case MUL: return "mul";
         case DIV: return "sdiv";
+        default: assert(false);
     }
 }
 

@@ -5,6 +5,7 @@
 string Load(int offset);
 int ZextAndStore(int offset, string value, basictype value_type);
 int Store(int offset, string value);
+string LoadAndTrunc(int offset, basictype value_type);
 using namespace std;
 
 string RelopTypeToString(reloptype type) {
@@ -97,7 +98,7 @@ string generateValue(basictype type, string value) {
 }
 
 void ImplementPrintingFunctions() {
-    
+
     CodeBuffer::instance().emit("declare i32 @printf(i8*, ...)                                                  ");
     CodeBuffer::instance().emit("declare void @exit(i32)                                                        ");
     CodeBuffer::instance().emitGlobal("@.int_specifier = constant [4 x i8] c\"%d\\0A\\00\"                       ");
@@ -254,10 +255,11 @@ StatementNode* HandleIfStatement(BoolExpNode* exp, string label, StatementNode* 
     s->MergeNextList(exp->false_list);
     return s;
 }
-StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementNode* s1, string label2, StatementNode* s2) {
+StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementNode* s1, NNode* N, string label2, StatementNode* s2) {
     exp->bpatchTrue(label1);
     exp->bpatchFalse(label2);
-
+                                                                
+    s2->MergeNextList(N->next_list);
     s2->MergeNextList(s1->next_list);
     return s2;
 }
@@ -271,7 +273,7 @@ StatementNode* HandleWhileStatement(string cond_label, BoolExpNode* exp, string 
     s->bpatchNextList(cond_label);
 
     // TODO do we need this next line?
-    // CodeBuffer::instance().emit("br label " + cond_label );
+    CodeBuffer::instance().emit("br label " + cond_label );
     return result;
 }
 
@@ -282,8 +284,7 @@ CallNode* HandleFunctionCall(IdNode* func_id, ExpListNode* expList) {
         if(not id_sym.type.is_function) {
             throw SymbolNotFound();
         }
-        std::vector<Type> empty_arg_list;
-        if(not hasSameArguments(id_sym.type.arguments, empty_arg_list)) {
+        if(not hasSameArguments(id_sym.type.arguments, expList->types)) {
             std::vector<std::string> args_as_strings = id_sym.type.getArgumentsAsStrings();
             output::errorPrototypeMismatch(func_id->lineno, func_id->name, args_as_strings);
             exit(0);
@@ -303,10 +304,6 @@ CallNode* HandleFunctionCall(IdNode* func_id, ExpListNode* expList) {
         exit(0);
     }
 }
-
-
-
-
 BoolExpNode::BoolExpNode(int lineno, bool value) :
         ExpNode(lineno, BOOL_TYPE, "",true)
 {

@@ -8,13 +8,13 @@
 #include "hw3_output.hpp"
 
 
-class MNode : Node {
+class MNode : public Node {
 public:
     string label;
     MNode() : Node(DONT_CARE), label(CodeBuffer::instance().genLabel()) {}
 };
 
-class NNode : Node {
+class NNode : public Node {
 public:
     std::vector<std::pair<int,BranchLabelIndex>> next_list;
     NNode() : Node(DONT_CARE) {
@@ -66,5 +66,15 @@ StatementNode* HandleDeclarationAssignment(bool is_const, TypeNode* type, IdNode
 string generateValue(basictype type, string value);
 int handleZeroError(string var);
 CallNode* HandleFunctionCall(IdNode* func_id, ExpListNode* expList = new ExpListNode(DONT_CARE));
-
+void HandleFunctionDeclaration(RetTypeNode* return_type, IdNode* id, FormalsNode* formals);
+StatementNode *HandleAssignment(IdNode *id, ExpNode *exp);
+void HandleReturnVoid();
+StatementNode* HandleReturnExp(ExpNode* exp);
+StatementNode* HandleBreak(int lineno);
+StatementNode* HandleContinue(int lineno);
+StatementNode* HandleIfStatement(BoolExpNode* exp, string label, StatementNode* s);
+StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementNode* s1, NNode* N, string label2, StatementNode* s2);
+StatementNode* HandleWhileStatement(string cond_label, BoolExpNode* exp, string s_label, StatementNode* s);
+BoolExpNode* HandleRelopExp(ExpNode* left, reloptype type , ExpNode* right);
+void ImplementPrintingFunctions();
 #endif //COMPI_EX5_IRSOURCE_H

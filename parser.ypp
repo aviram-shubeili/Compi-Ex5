@@ -1,7 +1,7 @@
 %{
 /* Definitions section */
 #include "hw3_output.hpp"
-#include "source.hpp"
+#include "IRsource.h"
 extern int yylineno;
 int yylex();
 extern int yychar;
@@ -99,7 +99,7 @@ Funcs: FuncDecl Funcs
  /* ******************************************************************************************** */
 FuncDecl: RetType ID LPAREN Formals RPAREN
                                             {
-                                              HandleFunctionDeclaration(((RetTypeNode*)$1), ((IdNode*)$2), (FormalsNode*)$4));
+                                              HandleFunctionDeclaration(((RetTypeNode*)$1), ((IdNode*)$2), ((FormalsNode*)$4));
                                             }
 
  LBRACE Statements RBRACE
@@ -167,7 +167,7 @@ Statement: { SymbolsRepo::Instance().openNewScope(); } LBRACE Statements RBRACE
 /* ******************************************************************************************** */
 Statement: TypeAnnotation Type ID SC
  {
-    $$ = HandleDeclaration(((TypeNode*)$2), ((IdNode*)$3));
+    $$ = HandleDeclaration(((TypeAnnotationNode*)$1)->is_const, ((TypeNode*)$2), ((IdNode*)$3));
  };
 /* ******************************************************************************************** */
 Statement: TypeAnnotation Type ID ASSIGN Exp SC
@@ -182,7 +182,7 @@ Statement: ID ASSIGN Exp SC
 /* ******************************************************************************************** */
 Statement: Call SC
  {
-  $$ = new StatementNode($2.lineno);
+  $$ = new StatementNode($2->lineno);
  } ;
 /* ******************************************************************************************** */
 Statement: RETURN SC
@@ -198,7 +198,7 @@ Statement: RETURN SC
       assert(false);
     }
     HandleReturnVoid();
-    $$ = new StatementNode($2.lineno, false);
+    $$ = new StatementNode($2->lineno, false);
  } ;
 /* ******************************************************************************************** */
 Statement: RETURN Exp SC
@@ -213,7 +213,7 @@ Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement %prec IF
    $$ = HandleIfStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6));
  } ;
  /* ******************************************************************************************** */
-Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement ELSE
+Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement N ELSE
                               {
                                  SymbolsRepo::Instance().closeScope();
                                  SymbolsRepo::Instance().openNewScope();
@@ -222,7 +222,7 @@ M Statement
   {
    SymbolsRepo::Instance().closeScope();
 
-  $$ = HandleIfElseStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6), ((MNode*)$9)->label, ((StatementNode*)$10));
+  $$ = HandleIfElseStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6), ((NNode*)$7), ((MNode*)$10)->label, ((StatementNode*)$11));
  } ;
  /* ******************************************************************************************** */
 Statement: WHILE M LPAREN Exp RPAREN
@@ -312,7 +312,7 @@ Exp: Exp MULDIV_BINOP Exp
   /* ******************************************************************************************** */
 Exp: Exp ADDSUB_BINOP Exp
   {
-      $$ = HandleBinopExp(((ExpNode*)$1), ((Binop*)$2), ((ExpNode*)$3;
+      $$ = HandleBinopExp(((ExpNode*)$1), ((Binop*)$2), ((ExpNode*)$3));
   };
   /* ******************************************************************************************** */
 Exp: ID
@@ -377,7 +377,7 @@ Exp: Exp AND M Exp
       exit(0);
     }
     $$ = $1;
-    ((BoolExpNode*)$$)->applyAND(((MNode*)$3)->label, ((BoolExpNode*)$4))
+    ((BoolExpNode*)$$)->applyAND(((MNode*)$3)->label, ((BoolExpNode*)$4));
   } ;
   /* ******************************************************************************************** */
 Exp: Exp OR M Exp
@@ -391,7 +391,7 @@ Exp: Exp OR M Exp
       exit(0);
     }
     $$ = $1;
-    ((BoolExpNode*)$$)->applyOR(((MNode*)$3)->label, ((BoolExpNode*)$4))
+    ((BoolExpNode*)$$)->applyOR(((MNode*)$3)->label, ((BoolExpNode*)$4));
    } ;
   /* ******************************************************************************************** */
 Exp: Exp RELATIONAL Exp
@@ -417,7 +417,7 @@ Exp: LPAREN Type RPAREN
       output::errorMismatch($5->lineno);
       exit(0);
     }
-    $$ = new ExpNode($5->lineno, ((TypeNode*)$2)->type, ((ExpNode*)$5)->getVal(), false);
+    $$ = new ExpNode($5->lineno, ((TypeNode*)$2)->type, ((ExpNode*)$5)->getVar(), false);
   } ;
   /* ******************************************************************************************** */
   M_IF_OPEN_SCOPE: /* epsilon */
@@ -435,16 +435,20 @@ Exp: LPAREN Type RPAREN
       $$ = new MNode();
   };
   /* ******************************************************************************************** */
+
   N: /* epsilon */
   {
-      $$ = new NNode();
+    $$ = new NNode();
   };
+
   /* ******************************************************************************************** */
 %%
 
 /* C user routines */
 int main() {
-    return yyparse();
+   yyparse();
+   CodeBuffer::instance().printGlobalBuffer();
+   CodeBuffer::instance().printCodeBuffer();
 }
 void yyerror(char const* msg) {
     output::errorSyn(((Node*) yylval)->lineno);
