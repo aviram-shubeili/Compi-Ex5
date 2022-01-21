@@ -229,8 +229,8 @@ M Statement
  /* ******************************************************************************************** */
 Statement: WHILE M LPAREN Exp RPAREN
                                   {
-                                     if(((ExpNode*)$3)->type != BOOL_TYPE) {
-                                       output::errorMismatch($3->lineno);
+                                     if(((ExpNode*)$4)->type != BOOL_TYPE) {
+                                       output::errorMismatch($4->lineno);
                                        exit(0);
                                      }
                                      SymbolsRepo::Instance().openNewScope();

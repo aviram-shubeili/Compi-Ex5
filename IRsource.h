@@ -15,7 +15,12 @@ enum jump_type {
 class MNode : public Node {
 public:
     string label;
-    MNode() : Node(DONT_CARE), label(CodeBuffer::instance().genLabel()) {}
+    MNode() : Node(DONT_CARE) {
+        int loc = CodeBuffer::instance().emit("br label @");
+        label = CodeBuffer::instance().genLabel();
+        CodeBuffer::instance().bpatch(CodeBuffer::makelist({loc,FIRST}), label);
+
+    }
 };
 
 class NNode : public Node {

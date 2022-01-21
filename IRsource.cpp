@@ -42,7 +42,7 @@ int Store(int offset, string value) {
     string bp = RegGenerator::Instance().getCurrentBasePointer();
     string ptr = RegGenerator::Instance().genRegister();
     CodeBuffer::instance().emit(ptr + " = getelementptr i32, i32* " + bp + " , i32 " + to_string(offset));
-    int loc = CodeBuffer::instance().emit("store i32 " + value + " i32* " + ptr);
+    int loc = CodeBuffer::instance().emit("store i32 " + value + ", i32* " + ptr);
     return loc;
 }
 string Load(int offset) {
@@ -138,6 +138,7 @@ void HandleFunctionDeclaration(RetTypeNode* return_type, IdNode* id, FormalsNode
         exit(0);
     }
     CodeBuffer::instance().emit("define " + typeToString(return_type->type) + "@" + id->name + formals->argListToString() + " {");
+    RegGenerator::Instance().genBP();
 }
 
 
@@ -317,7 +318,7 @@ StatementNode* HandleWhileStatement(string cond_label, BoolExpNode* exp, string 
     // after s check cond again
     s->bpatchNextList(cond_label);
 
-    CodeBuffer::instance().emit("br label " + cond_label );
+    CodeBuffer::instance().emit("br label %" + cond_label );
     return result;
 }
 
@@ -352,14 +353,17 @@ void HandleEndOfFunction(StatementNode* s) {
 
     try {
         Symbol current_function = SymbolsRepo::Instance().findSymbol(SymbolsRepo::Instance().currentFunctionName);
+        int loc = CodeBuffer::instance().emit("br label @");
         string func_end_label = CodeBuffer::instance().genLabel();
         s->bpatchNextList(func_end_label);
+        CodeBuffer::instance().bpatch(CodeBuffer::makelist({loc,FIRST}),func_end_label);
         if (current_function.getType() != VOID_TYPE) {
             CodeBuffer::instance().emit("ret " + typeToString(current_function.getType()) + " 0");
         }
         else {
             CodeBuffer::instance().emit("ret void");
         }
+        RegGenerator::Instance().popBasePointer();
     }
     catch(SymbolNotFound& e) {
         assert(false);
@@ -444,7 +448,7 @@ std::string BoolExpNode::getVar(bool is_const) {
     CodeBuffer::instance().bpatch(end_list,end_label);
 
 
-    CodeBuffer::instance().emit(result_reg + " = phi i1 [1, "  + true_label + "], [0, " + false_label + "]");
+    CodeBuffer::instance().emit(result_reg + " = phi i1 [1, %"  + true_label + "], [0, %" + false_label + "]");
 
     this->true_list.clear();
     this->false_list.clear();
@@ -484,6 +488,19 @@ ExpNode* HandleBinopExp(ExpNode* left, Binop* op, ExpNode* right) {
                             ? INT_TYPE
                             : BYTE_TYPE;
 
+    string operation_size = " i32 ";
+
+    string left_arg = left->getVar();
+    string right_arg = right->getVar();
+    if(left->type == BYTE_TYPE && right->type == BYTE_TYPE)
+    {
+        operation_size = " i8 ";
+    }
+    else {
+        left_arg = Zext(left_arg, left->type);
+        right_arg = Zext(right_arg, right->type);
+    }
+
     if(op->type == DIV) {
         int loc = handleZeroError(right->getVar());
         if(left->type == BYTE_TYPE && right->type == BYTE_TYPE)
@@ -494,14 +511,14 @@ ExpNode* HandleBinopExp(ExpNode* left, Binop* op, ExpNode* right) {
         CodeBuffer::instance().bpatch(CodeBuffer::makelist({loc,SECOND}),label);
     }
     string var = RegGenerator::Instance().genRegister();
-    CodeBuffer::instance().emit(var + " = " + op_str + " i32 " + left->getVar() + " " + right->getVar());
+    CodeBuffer::instance().emit(var + " = " + op_str + operation_size + left_arg + ", " + right_arg);
 
-    if(result_type == BYTE_TYPE)
-    {
-        string new_var = RegGenerator::Instance().genRegister();
-        CodeBuffer::instance().emit(new_var + " = trunc i32 " + var + " to i8");
-        var = new_var;
-    }
+//    if(result_type == BYTE_TYPE)
+//    {
+//        string new_var = RegGenerator::Instance().genRegister();
+//        CodeBuffer::instance().emit(new_var + " = trunc i32 " + var + " to i8");
+//        var = new_var;
+//    }
 
     ExpNode* res = new ExpNode(right->lineno, result_type, var);
     return res;
@@ -541,10 +558,12 @@ ExpNode *HandleIDExp(IdNode *id) {
 }
 BoolExpNode* HandleRelopExp(ExpNode* left, reloptype type , ExpNode* right) {
     if((left->type != INT_TYPE) and (left->type != BYTE_TYPE)) {
+//        cout << ("left?");
         output::errorMismatch(left->lineno);
         exit(0);
     }
     if((right->type != INT_TYPE) and (right->type != BYTE_TYPE)) {
+//        cout << ("right?");
         output::errorMismatch(right->lineno);
         exit(0);
     }

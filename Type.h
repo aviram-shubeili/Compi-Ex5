@@ -45,9 +45,9 @@ class Symbol  {
 public:
     std::string name;
     Type type;
-    enum symboltype symbol_type;
-    int offset = 0;
-    std::string value;
+    enum symboltype symbol_type; // can be literal / argument / local
+    int offset = 0;              // if its a local variable we save the offset in stack
+    std::string value;           // if its literal we save the value
     Symbol(std::string n, Type t, int ofs) : name(std::move(n)), type(std::move(t)), symbol_type(LOCAL), offset(ofs) {}
     Symbol(std::string n, Type t, symboltype symbol_type, std::string value) : name(std::move(n)), type(std::move(t)),
                                                                                symbol_type(symbol_type), value(std::move(value)) {}
