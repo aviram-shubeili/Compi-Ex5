@@ -7,7 +7,11 @@
 #include "bp.hpp"
 #include "hw3_output.hpp"
 
-
+enum jump_type {
+    BREAK_JMP,
+    NEXT_JMP,
+    NONE
+};
 class MNode : public Node {
 public:
     string label;
@@ -34,11 +38,6 @@ public:
     std::vector<std::pair<int,BranchLabelIndex>> false_list;
     BoolExpNode(int lineno, bool value);
     BoolExpNode(int lineno, std::string value);
-//    BoolExpNode(int lineno, basictype type, std::vector<std::pair<int,BranchLabelIndex>> true_list, std::vector<std::pair<int,BranchLabelIndex>> false_list)
-//            : ExpNode(lineno, type, RegGenerator::Instance().genRegister()),
-//              true_list(true_list),
-//              false_list(false_list)
-//    {}
     std::string getVar() override;
     std::string getVar(bool is_const) override;
     void bpatchTrue(string label);
@@ -49,10 +48,12 @@ public:
 class StatementNode : public Node {
 public:
     std::vector<std::pair<int,BranchLabelIndex>> next_list;
+    std::vector<std::pair<int,BranchLabelIndex>> break_list;
     void bpatchNextList(string label);
     void MergeNextList(std::vector<std::pair<int,BranchLabelIndex>> other_list);
-    explicit StatementNode(int lineno);
-    StatementNode(int lineno, bool is_there_jump);
+    void MergeBreakList(std::vector<std::pair<int,BranchLabelIndex>> other_list);
+    void bpatchBreakList(string label);
+    StatementNode(int lineno, jump_type jump_t);
 };
 
 string Zext(string reg, basictype type);
@@ -68,7 +69,7 @@ int handleZeroError(string var);
 CallNode* HandleFunctionCall(IdNode* func_id, ExpListNode* expList = new ExpListNode(DONT_CARE));
 void HandleFunctionDeclaration(RetTypeNode* return_type, IdNode* id, FormalsNode* formals);
 StatementNode *HandleAssignment(IdNode *id, ExpNode *exp);
-void HandleReturnVoid();
+StatementNode * HandleReturnVoid(int lineno);
 StatementNode* HandleReturnExp(ExpNode* exp);
 StatementNode* HandleBreak(int lineno);
 StatementNode* HandleContinue(int lineno);
@@ -76,5 +77,7 @@ StatementNode* HandleIfStatement(BoolExpNode* exp, string label, StatementNode* 
 StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementNode* s1, NNode* N, string label2, StatementNode* s2);
 StatementNode* HandleWhileStatement(string cond_label, BoolExpNode* exp, string s_label, StatementNode* s);
 BoolExpNode* HandleRelopExp(ExpNode* left, reloptype type , ExpNode* right);
+void HandleEndOfFunction(StatementNode* s);
+
 void ImplementPrintingFunctions();
 #endif //COMPI_EX5_IRSOURCE_H

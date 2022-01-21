@@ -38,12 +38,12 @@ void SymbolsRepo::insertSymbolAsLiteral(std::string name, Type type, std::string
 
 
 void SymbolsRepo::closeScope() {
-    output::endScope();
-    SymbolMap::iterator it;
-    for (Symbol& symbol : symbolMapStack.back())
-    {
-        output::printID(symbol.name, symbol.offset, symbol.type.toString());
-    }
+//    output::endScope();
+//    SymbolMap::iterator it;
+//    for (Symbol& symbol : symbolMapStack.back())
+//    {
+//        output::printID(symbol.name, symbol.offset, symbol.type.toString());
+//    }
     symbolMapStack.pop_back();
     offsetStack.pop_back();
 }

@@ -6,6 +6,9 @@ string Load(int offset);
 int ZextAndStore(int offset, string value, basictype value_type);
 int Store(int offset, string value);
 string LoadAndTrunc(int offset, basictype value_type);
+
+string jmpListToString(vector<pair<int, BranchLabelIndex>> vector);
+
 using namespace std;
 
 string RelopTypeToString(reloptype type) {
@@ -90,8 +93,9 @@ string generateValue(basictype type, string value) {
     else{
         assert(type==STRING_TYPE);
         string loc = RegGenerator::Instance().genString();
-        string len = to_string(value.length() + 1);
-        CodeBuffer::instance().emitGlobal(loc + " = constant [" + len + " x i8] c\"" + value + "\"");
+        string len = to_string(value.length() -1);
+        value[value.length() -1] = '\\';
+        CodeBuffer::instance().emitGlobal(loc + " = constant [" + len + " x i8] c" + value + "00\"");
         CodeBuffer::instance().emit(new_reg + " = getelementptr " + "[" + len + " x i8] " + "[" + len + " x i8]* " + loc + ", i32 0, i32 0");
     }
     return new_reg;
@@ -136,16 +140,22 @@ void HandleFunctionDeclaration(RetTypeNode* return_type, IdNode* id, FormalsNode
     CodeBuffer::instance().emit("define " + typeToString(return_type->type) + "@" + id->name + formals->argListToString() + " {");
 }
 
-StatementNode::StatementNode(int lineno) : Node(lineno) {
-    int loc = CodeBuffer::instance().emit("br label @");
-    next_list = CodeBuffer::makelist({loc, FIRST});
-}
-StatementNode::StatementNode(int lineno, bool is_there_jump) : Node(lineno) {
-    if(is_there_jump) {
-        int loc = CodeBuffer::instance().emit("br label @");
-        next_list = CodeBuffer::makelist({loc, FIRST});
+
+StatementNode::StatementNode(int lineno, jump_type jump_t)  : Node(lineno) {
+    int loc;
+    switch (jump_t) {
+        case NEXT_JMP:
+            loc = CodeBuffer::instance().emit("br label @");
+            next_list = CodeBuffer::makelist({loc, FIRST});
+            break;
+        case BREAK_JMP:
+            loc = CodeBuffer::instance().emit("br label @");
+            break_list = CodeBuffer::makelist({loc, FIRST});
+            break;
+        case NONE: return;
     }
 }
+
 void StatementNode::MergeNextList(std::vector<std::pair<int, BranchLabelIndex>> other_list) {
     this->next_list = CodeBuffer::merge(this->next_list, other_list);
 }
@@ -154,6 +164,15 @@ void StatementNode::bpatchNextList(string label) {
     CodeBuffer::instance().bpatch(next_list, label);
     next_list.clear();
 }
+
+void StatementNode::MergeBreakList(std::vector<std::pair<int, BranchLabelIndex>> other_list) {
+    this->break_list = CodeBuffer::merge(this->break_list, other_list);
+}
+void StatementNode::bpatchBreakList(string label) {
+    CodeBuffer::instance().bpatch(break_list, label);
+    break_list.clear();
+}
+
 
 StatementNode *HandleDeclaration(bool is_const, TypeNode *type, IdNode *id) {
     if(is_const) {
@@ -174,7 +193,7 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
         if(is_const and exp->is_literal) {
             SymbolsRepo::Instance().insertSymbolAsLiteral(id->name, Type(is_const, type->type), exp->getVar(true));
             CodeBuffer::instance().emit("; literal definition here");
-            return new StatementNode(exp->lineno);
+            return new StatementNode(exp->lineno, NONE);
         }
         else {
             SymbolsRepo::Instance().insertSymbol(id->name, Type(is_const, type->type));
@@ -186,7 +205,7 @@ StatementNode *HandleDeclarationAssignment(bool is_const, TypeNode *type, IdNode
                 exp->setVar(Zext(exp->getVar(), exp->type));
             }
             Store(id_sym.offset, exp->getVar());
-            return new StatementNode(exp->lineno);
+            return new StatementNode(exp->lineno, NONE);
         }
     }
     catch (SymbolAlreadyDefinedInScope& e) {
@@ -207,7 +226,7 @@ StatementNode *HandleAssignment(IdNode *id, ExpNode *exp) {
         }
 
         ZextAndStore(id_sym.offset, exp->getVar(), exp->type);
-        return new StatementNode(exp->lineno);
+        return new StatementNode(exp->lineno, NONE);
     }
     catch(SymbolNotFound& e) {
         output::errorUndef(id->lineno, id->name);
@@ -215,8 +234,19 @@ StatementNode *HandleAssignment(IdNode *id, ExpNode *exp) {
     }
 
 }
-void HandleReturnVoid() {
-    CodeBuffer::instance().emit("ret");
+StatementNode * HandleReturnVoid(int lineno) {
+    try {
+        Symbol current_function = SymbolsRepo::Instance().findSymbol(SymbolsRepo::Instance().currentFunctionName);
+        if(current_function.getType() != VOID_TYPE) {
+            output::errorMismatch(lineno);
+            exit(0);
+        }
+        CodeBuffer::instance().emit("ret");
+        return new StatementNode(lineno, NONE);
+    }
+    catch(SymbolNotFound& e) {
+        assert(false);
+    }
 }
 StatementNode* HandleReturnExp(ExpNode* exp) {
     try {
@@ -230,25 +260,26 @@ StatementNode* HandleReturnExp(ExpNode* exp) {
             exit(0);
         }
         CodeBuffer::instance().emit("ret " + typeToString(exp->type) + " " + exp->getVar());
-        return new StatementNode(exp->lineno, false);
+        return new StatementNode(exp->lineno, NONE);
     }
     catch(SymbolNotFound& e) {
         assert(false);
     }
 }
 StatementNode* HandleBreak(int lineno) {
+    // TODO
     if(not SymbolsRepo::Instance().isInLoop()) {
         output::errorUnexpectedBreak(lineno);
         exit(0);
     }
-    return new StatementNode(lineno);
+    return new StatementNode(lineno, BREAK_JMP);
 }
 StatementNode* HandleContinue(int lineno) {
     if(not SymbolsRepo::Instance().isInLoop()) {
         output::errorUnexpectedContinue(lineno);
         exit(0);
     }
-    return new StatementNode(lineno);
+    return new StatementNode(lineno, NEXT_JMP);
 }
 StatementNode* HandleIfStatement(BoolExpNode* exp, string label, StatementNode* s) {
     exp->bpatchTrue(label);
@@ -258,21 +289,34 @@ StatementNode* HandleIfStatement(BoolExpNode* exp, string label, StatementNode* 
 StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementNode* s1, NNode* N, string label2, StatementNode* s2) {
     exp->bpatchTrue(label1);
     exp->bpatchFalse(label2);
-                                                                
+
+
     s2->MergeNextList(N->next_list);
     s2->MergeNextList(s1->next_list);
     return s2;
 }
+
+string jmpListToString(vector<pair<int, BranchLabelIndex>> vector) {
+    string result = "***************\n";
+    for ( auto jmp : vector) {
+        result += to_string(jmp.first);
+        result += ", ";
+        result += to_string(jmp.second) + "\n";
+    }
+    result += "***************\n";
+    return result;
+}
+
 StatementNode* HandleWhileStatement(string cond_label, BoolExpNode* exp, string s_label, StatementNode* s) {
-    StatementNode* result = new StatementNode(s->lineno, false);
+    StatementNode* result = new StatementNode(s->lineno, NONE);
     // if cond is false goto next statement
     result->next_list = exp->false_list;
+    result->MergeNextList(s->break_list);
     // if true do s..
     exp->bpatchTrue(s_label);
     // after s check cond again
     s->bpatchNextList(cond_label);
 
-    // TODO do we need this next line?
     CodeBuffer::instance().emit("br label " + cond_label );
     return result;
 }
@@ -304,6 +348,11 @@ CallNode* HandleFunctionCall(IdNode* func_id, ExpListNode* expList) {
         exit(0);
     }
 }
+void HandleEndOfFunction(StatementNode* s) {
+    string func_end_label = CodeBuffer::instance().genLabel();
+    s->bpatchNextList(func_end_label);
+}
+
 BoolExpNode::BoolExpNode(int lineno, bool value) :
         ExpNode(lineno, BOOL_TYPE, "",true)
 {
@@ -324,7 +373,7 @@ BoolExpNode::BoolExpNode(int lineno, std::string value) :
         ExpNode(lineno, BOOL_TYPE, "",false /*TODO is this ok? */ ) {
 
     string cond = RegGenerator::Instance().genRegister();
-    CodeBuffer::instance().emit(cond + " = icmp eq i1" + value + " , 1");
+    CodeBuffer::instance().emit(cond + " = icmp eq i1 " + value + " , 1");
     int loc = CodeBuffer::instance().emit("br i1 " + cond + ", label @, label @");
     ignore_label = CodeBuffer::instance().genLabel();
 
@@ -489,7 +538,7 @@ BoolExpNode* HandleRelopExp(ExpNode* left, reloptype type , ExpNode* right) {
     string right_reg = Zext(right->getVar(), right->type);
     string left_reg = Zext(left->getVar(), left->type);
     string cond = RegGenerator::Instance().genRegister();
-    CodeBuffer::instance().emit(cond + " = icmp " + RelopTypeToString(type) + " i32" + left_reg + " , " + right_reg);
+    CodeBuffer::instance().emit(cond + " = icmp" + RelopTypeToString(type) + "i32 " + left_reg + " , " + right_reg);
     return new BoolExpNode(right->lineno, cond);
 }
 

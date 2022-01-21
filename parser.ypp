@@ -104,6 +104,7 @@ FuncDecl: RetType ID LPAREN Formals RPAREN
 
  LBRACE Statements RBRACE
  {
+    HandleEndOfFunction(((StatementNode*)$8));
     SymbolsRepo::Instance().currentFunctionName = "";
     SymbolsRepo::Instance().closeScope();
     CodeBuffer::instance().emit("}");
@@ -155,6 +156,7 @@ Statements: Statements M Statement
  {
 
     ((StatementNode*)$1)->bpatchNextList(((MNode*)$2)->label);
+    ((StatementNode*)$3)->MergeBreakList(((StatementNode*)$1)->break_list);
     $$ = $3;
 
  } ;
@@ -182,7 +184,7 @@ Statement: ID ASSIGN Exp SC
 /* ******************************************************************************************** */
 Statement: Call SC
  {
-  $$ = new StatementNode($2->lineno);
+  $$ = new StatementNode($2->lineno, NONE);
  } ;
 /* ******************************************************************************************** */
 Statement: RETURN SC
@@ -197,8 +199,8 @@ Statement: RETURN SC
     catch(SymbolNotFound& e) {
       assert(false);
     }
-    HandleReturnVoid();
-    $$ = new StatementNode($2->lineno, false);
+    HandleReturnVoid($2->lineno);
+    $$ = new StatementNode($2->lineno, NONE);
  } ;
 /* ******************************************************************************************** */
 Statement: RETURN Exp SC
@@ -213,7 +215,7 @@ Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement %prec IF
    $$ = HandleIfStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6));
  } ;
  /* ******************************************************************************************** */
-Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement N ELSE
+Statement: IF LPAREN Exp RPAREN M_IF_OPEN_SCOPE Statement ELSE N
                               {
                                  SymbolsRepo::Instance().closeScope();
                                  SymbolsRepo::Instance().openNewScope();
@@ -222,7 +224,7 @@ M Statement
   {
    SymbolsRepo::Instance().closeScope();
 
-  $$ = HandleIfElseStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6), ((NNode*)$7), ((MNode*)$10)->label, ((StatementNode*)$11));
+  $$ = HandleIfElseStatement(((BoolExpNode*)$3), ((MNode*)$5)->label, ((StatementNode*)$6), ((NNode*)$8), ((MNode*)$10)->label, ((StatementNode*)$11));
  } ;
  /* ******************************************************************************************** */
 Statement: WHILE M LPAREN Exp RPAREN

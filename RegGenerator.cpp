@@ -6,7 +6,7 @@
 
 using namespace std;
 RegGenerator::RegGenerator() : free_index(0) {
-    CodeBuffer::instance().emitGlobal("@.zero_error = constant [23 x i8] c\"Error division by zero\00\" ");
+    CodeBuffer::instance().emitGlobal("@.zero_error = constant [23 x i8] c\"Error division by zero\\00\" ");
 
 }
 
