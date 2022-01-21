@@ -96,7 +96,7 @@ string generateValue(basictype type, string value) {
         string len = to_string(value.length() -1);
         value[value.length() -1] = '\\';
         CodeBuffer::instance().emitGlobal(loc + " = constant [" + len + " x i8] c" + value + "00\"");
-        CodeBuffer::instance().emit(new_reg + " = getelementptr " + "[" + len + " x i8] " + "[" + len + " x i8]* " + loc + ", i32 0, i32 0");
+        CodeBuffer::instance().emit(new_reg + " = getelementptr " + "[" + len + " x i8], " + "[" + len + " x i8]* " + loc + ", i32 0, i32 0");
     }
     return new_reg;
 }
@@ -349,8 +349,21 @@ CallNode* HandleFunctionCall(IdNode* func_id, ExpListNode* expList) {
     }
 }
 void HandleEndOfFunction(StatementNode* s) {
-    string func_end_label = CodeBuffer::instance().genLabel();
-    s->bpatchNextList(func_end_label);
+
+    try {
+        Symbol current_function = SymbolsRepo::Instance().findSymbol(SymbolsRepo::Instance().currentFunctionName);
+        string func_end_label = CodeBuffer::instance().genLabel();
+        s->bpatchNextList(func_end_label);
+        if (current_function.getType() != VOID_TYPE) {
+            CodeBuffer::instance().emit("ret " + typeToString(current_function.getType()) + " 0");
+        }
+        else {
+            CodeBuffer::instance().emit("ret void");
+        }
+    }
+    catch(SymbolNotFound& e) {
+        assert(false);
+    }
 }
 
 BoolExpNode::BoolExpNode(int lineno, bool value) :

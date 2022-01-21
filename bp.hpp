@@ -11,6 +11,8 @@ using namespace std;
 enum BranchLabelIndex {FIRST, SECOND};
 
 class CodeBuffer{
+    size_t lastLabelLocation;
+    string lastLabel;
 	CodeBuffer();
 	CodeBuffer(CodeBuffer const&);
     void operator=(CodeBuffer const&);

@@ -6,7 +6,7 @@ using namespace std;
 
 bool replace(string& str, const string& from, const string& to, const BranchLabelIndex index);
 
-CodeBuffer::CodeBuffer() : buffer(), globalDefs() {}
+CodeBuffer::CodeBuffer() : buffer(), globalDefs(), lastLabelLocation(-1) {}
 
 CodeBuffer &CodeBuffer::instance() {
 	static CodeBuffer inst;//only instance
@@ -14,12 +14,17 @@ CodeBuffer &CodeBuffer::instance() {
 }
 
 string CodeBuffer::genLabel(){
+    if(lastLabelLocation == buffer.size() - 1) {
+        return lastLabel;
+    }
 	std::stringstream label;
 	label << "label_";
 	label << buffer.size();
 	std::string ret(label.str());
 	label << ":";
 	emit(label.str());
+	lastLabel = ret;
+	lastLabelLocation = buffer.size() - 1;
 	return ret;
 }
 
