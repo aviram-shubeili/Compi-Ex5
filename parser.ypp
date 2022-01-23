@@ -157,6 +157,7 @@ Statements: Statements M Statement
 
     ((StatementNode*)$1)->bpatchNextList(((MNode*)$2)->label);
     ((StatementNode*)$3)->MergeBreakList(((StatementNode*)$1)->break_list);
+    ((StatementNode*)$3)->MergeContinueList(((StatementNode*)$1)->continue_list);
     $$ = $3;
 
  } ;

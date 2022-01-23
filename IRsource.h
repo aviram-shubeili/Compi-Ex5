@@ -9,6 +9,7 @@
 
 enum jump_type {
     BREAK_JMP,
+    CONTINUE_JMP,
     NEXT_JMP,
     NONE
 };
@@ -55,10 +56,13 @@ class StatementNode : public Node {
 public:
     std::vector<std::pair<int,BranchLabelIndex>> next_list;
     std::vector<std::pair<int,BranchLabelIndex>> break_list;
+    std::vector<std::pair<int,BranchLabelIndex>> continue_list;
     void bpatchNextList(string label);
+    void bpatchBreakList(string label);
+    void bpatchContinueList(string label);
     void MergeNextList(std::vector<std::pair<int,BranchLabelIndex>> other_list);
     void MergeBreakList(std::vector<std::pair<int,BranchLabelIndex>> other_list);
-    void bpatchBreakList(string label);
+    void MergeContinueList(std::vector<std::pair<int,BranchLabelIndex>> other_list);
     StatementNode(int lineno, jump_type jump_t);
 };
 

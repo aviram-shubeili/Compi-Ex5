@@ -156,6 +156,10 @@ StatementNode::StatementNode(int lineno, jump_type jump_t)  : Node(lineno) {
             loc = CodeBuffer::instance().emit("br label @");
             break_list = CodeBuffer::makelist({loc, FIRST});
             break;
+        case CONTINUE_JMP:
+            loc = CodeBuffer::instance().emit("br label @");
+            continue_list = CodeBuffer::makelist({loc, FIRST});
+            break;
         case NONE: return;
     }
 }
@@ -175,6 +179,15 @@ void StatementNode::MergeBreakList(std::vector<std::pair<int, BranchLabelIndex>>
 void StatementNode::bpatchBreakList(string label) {
     CodeBuffer::instance().bpatch(break_list, label);
     break_list.clear();
+}
+
+void StatementNode::MergeContinueList(std::vector<std::pair<int, BranchLabelIndex>> other_list) {
+    this->continue_list = CodeBuffer::merge(this->continue_list, other_list);
+}
+
+void StatementNode::bpatchContinueList(string label) {
+    CodeBuffer::instance().bpatch(continue_list, label);
+    continue_list.clear();
 }
 
 
@@ -282,7 +295,7 @@ StatementNode* HandleContinue(int lineno) {
         output::errorUnexpectedContinue(lineno);
         exit(0);
     }
-    return new StatementNode(lineno, NEXT_JMP);
+    return new StatementNode(lineno, CONTINUE_JMP);
 }
 StatementNode* HandleIfStatement(BoolExpNode* exp, string label, StatementNode* s) {
     exp->bpatchTrue(label);
@@ -297,6 +310,7 @@ StatementNode* HandleIfElseStatement(BoolExpNode* exp, string label1, StatementN
     s2->MergeNextList(N->next_list);
     s2->MergeNextList(s1->next_list);
     s2->MergeBreakList(s1->break_list);
+    s2->MergeContinueList(s1->continue_list);
     return s2;
 }
 
@@ -320,6 +334,7 @@ StatementNode* HandleWhileStatement(string cond_label, BoolExpNode* exp, string 
     exp->bpatchTrue(s_label);
     // after s check cond again
     s->bpatchNextList(cond_label);
+    s->bpatchContinueList(cond_label);
 
     CodeBuffer::instance().emit("br label %" + cond_label );
     return result;
@@ -329,6 +344,7 @@ ExpNode* HandleExpCall(CallNode* callNode) {
     if(callNode->type == BOOL_TYPE) {
         return new BoolExpNode(callNode->lineno, callNode->value);
     }
+
 
     return new ExpNode(callNode->lineno, callNode->type, callNode->value);
 }
