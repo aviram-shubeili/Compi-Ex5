@@ -1,7 +1,4 @@
 #include "source.hpp"
-#include <memory>
-#include <cassert>
-#include <algorithm>
 
 
 
@@ -62,24 +59,6 @@ void ExpListNode::addExp(ExpNode *exp) {
     types.emplace_back(exp->type);
 }
 
-std::string ExpListNode::argListToString() {
-
-    if(expressions.empty()) {
-        return "()";
-    }
-    vector<ExpNode*> expressions_cpy = expressions;
-    std::reverse(expressions_cpy.begin(),expressions_cpy.end());
-
-    string result = "(";
-    for( ExpNode* exp : expressions_cpy) {
-        result += typeToString(exp->type);
-        result += exp->getVar();
-        result += ",";
-    }
-    result[result.length()-1] = ')';
-
-    return result;
-}
 
 
 std::string Binop::toString() {

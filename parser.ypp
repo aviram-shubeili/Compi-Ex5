@@ -324,7 +324,7 @@ Exp: ID
   /* ******************************************************************************************** */
 Exp: Call
   {
-    $$ = new ExpNode($1->lineno, ((CallNode*)$1)->type, ((CallNode*)$1)->value);
+    $$ = HandleExpCall(((CallNode*)$1));
   } ;
   /* ******************************************************************************************** */
 Exp: NUM
@@ -415,11 +415,7 @@ Exp: LPAREN Type RPAREN
                         }
  Exp %prec CASTING
   {
-    if(((ExpNode*)$5)->type != INT_TYPE and ((ExpNode*)$5)->type != BYTE_TYPE) {
-      output::errorMismatch($5->lineno);
-      exit(0);
-    }
-    $$ = new ExpNode($5->lineno, ((TypeNode*)$2)->type, ((ExpNode*)$5)->getVar(), false);
+    $$ = HandleCasting(((TypeNode*)$2), ((ExpNode*)$5));
   } ;
   /* ******************************************************************************************** */
   M_IF_OPEN_SCOPE: /* epsilon */
