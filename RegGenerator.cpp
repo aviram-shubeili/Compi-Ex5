@@ -10,7 +10,7 @@ RegGenerator::RegGenerator() : free_index(0) {
 
 }
 
-// make SymbolsRepo singleton
+// make SymbolsRepo singleton.
 RegGenerator &RegGenerator::Instance() {
     static RegGenerator instance; // Guaranteed to be destroyed.
     // Instantiated on first use.
